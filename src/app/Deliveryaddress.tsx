@@ -10,13 +10,16 @@ import {
   Button,
   Modal,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
-import MapView, { Marker, Region } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from './lib/supabase';
+import MapView, { Marker } from './components/Map';
+import { useRouter } from 'expo-router';
 
-interface Coordinates {
+// Define Region type here to avoid importing from react-native-maps on web
+interface Region {
   latitude: number;
   longitude: number;
 }
@@ -45,6 +48,8 @@ const SetDeliveryAddress: React.FC = () => {
   const [deliveryNote, setDeliveryNote] = useState<string>('');
   // This local state holds the marker position while adjusting in the modal.
   const [modalCoords, setModalCoords] = useState<Coordinates | null>(null);
+
+  const router = useRouter();
 
   // Request location permission and get device location on mount
   useEffect(() => {
@@ -194,7 +199,12 @@ const SetDeliveryAddress: React.FC = () => {
     if (error) {
       Alert.alert('Error', 'Could not save address: ' + error.message);
     } else {
-      Alert.alert('Success', 'Delivery address saved successfully.');
+      alert('Delivery address saved successfully.');
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/cart');
+      }
     }
     setIsSubmitting(false);
   };
@@ -279,7 +289,11 @@ const SetDeliveryAddress: React.FC = () => {
       <Modal visible={showMapModal} animationType="slide">
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitle}>Adjust Your Location</Text>
-          {modalCoords ? (
+          {Platform.OS === 'web' ? (
+            <View style={styles.map}>
+                <Text>Map functionality is not available on the web.</Text>
+            </View>
+          ) : modalCoords ? (
             <MapView
               style={styles.map}
               initialRegion={{
@@ -294,7 +308,7 @@ const SetDeliveryAddress: React.FC = () => {
               <Marker
                 coordinate={modalCoords}
                 draggable
-                onDragEnd={(e) => setModalCoords(e.nativeEvent.coordinate)}
+                onDragEnd={(e: any) => setModalCoords(e.nativeEvent.coordinate)}
               />
             </MapView>
           ) : (
@@ -354,6 +368,6 @@ const styles = StyleSheet.create({
   saveButtonContainer: { marginTop: 30 },
   modalContainer: { flex: 1, padding: 16, backgroundColor: '#fff' },
   modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
-  map: { flex: 1, borderRadius: 8 },
+  map: { flex: 1, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f0f0' },
   modalFooter: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 10 },
 });

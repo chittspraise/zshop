@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as aesjs from 'aes-js';
 import 'react-native-get-random-values';
 import { Database } from "../../types/database.types";
-
+import { Platform } from 'react-native';
 
 // As Expo's SecureStore does not support values larger than 2048
 // bytes, an AES-256 key is generated and stored in SecureStore, while
@@ -34,6 +34,10 @@ class LargeSecureStore {
   }
 
   async getItem(key: string) {
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined') return null;
+      return await AsyncStorage.getItem(key);
+    }
     const encrypted = await AsyncStorage.getItem(key);
     if (!encrypted) { return encrypted; }
 
@@ -41,11 +45,21 @@ class LargeSecureStore {
   }
 
   async removeItem(key: string) {
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined') return;
+      await AsyncStorage.removeItem(key);
+      return;
+    }
     await AsyncStorage.removeItem(key);
     await SecureStore.deleteItemAsync(key);
   }
 
   async setItem(key: string, value: string) {
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined') return;
+      await AsyncStorage.setItem(key, value);
+      return;
+    }
     const encrypted = await this._encrypt(key, value);
 
     await AsyncStorage.setItem(key, encrypted);
@@ -55,11 +69,16 @@ class LargeSecureStore {
 const supabaseUrl = "https://qzfphqccgcwetislggto.supabase.co"
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6ZnBocWNjZ2N3ZXRpc2xnZ3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4MjIyNTMsImV4cCI6MjA4MzM5ODI1M30.8_o-FHRUHBO-br4DnbsdFd5otg6ZVjtmMzW9gCMeOYw"
 
-export  const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+const dummyLock = async <R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
+  return await fn();
+};
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: new LargeSecureStore(),
+    storage: Platform.OS === 'web' ? (typeof window !== 'undefined' ? window.localStorage : undefined) : new LargeSecureStore(),
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    lock: dummyLock,
   },
 });

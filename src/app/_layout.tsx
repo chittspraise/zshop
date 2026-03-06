@@ -2,7 +2,7 @@ import { Stack, useRouter, usePathname } from 'expo-router';
 import { ToastProvider } from 'react-native-toast-notifications';
 import AuthProvider from './Providers/auth-provider';
 import QueryProvider from './Providers/query-provider';
-import { StripeProvider } from '@stripe/stripe-react-native';
+import StripeProvider from './Providers/StripeProvider';
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Platform, SafeAreaView, StyleSheet } from 'react-native';
@@ -94,7 +94,6 @@ export default function RootLayout() {
                         <Stack.Screen name="product" options={{ headerShown: false, title: 'New Password' }} />
                         <Stack.Screen name="categories" options={{ headerShown: false, title: 'categories' }} />
                         <Stack.Screen name="cart" options={{ headerShown: false, title: 'cart' }} />
-                        <Stack.Screen name="contact" options={{ headerShown: true, title: 'contact' }} />
                         <Stack.Screen name="Deliveryaddress" options={{ headerShown: false, title: 'My Address' }} />
                       </Stack>
 

@@ -121,6 +121,7 @@ export const ListHeader = ({ categories }: { categories: Tables<'category'>[] })
           keyExtractor={(item) => item.name}
           horizontal
           showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 10 }}
         />
       </View>
     </View>
@@ -164,19 +165,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   categoriesContainer: {
-    paddingHorizontal: 10,
     marginTop: 20,
   },
   sectionTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
+    paddingHorizontal: 10,
   },
   category: {
-    width: 100,
+    width: (width - 20) / 3,
     alignItems: 'center',
     marginBottom: 16,
-    marginRight: 10,
   },
   categoryImage: {
     width: 60,

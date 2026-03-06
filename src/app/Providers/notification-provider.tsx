@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, PropsWithChildren } from 'react';
 
 import * as Notifications from 'expo-notifications';
-import registerForPushNotificationsAsync from '../lib/notifications';
+import { registerForPushNotificationsAsync } from '../lib/notifications';
 import { supabase } from '../lib/supabase';
 
 Notifications.setNotificationHandler({

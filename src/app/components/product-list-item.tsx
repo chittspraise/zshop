@@ -11,8 +11,7 @@ export const ProductListItem = ({
 }) => {
   const { addItem, incrementItem, decrementItem, items } = useCartStore();
   const cartItem = items.find(item => item.id === product.id);
-  const initialQuantity = cartItem ? cartItem.quantity : 0;
-  const [quantity, setQuantity] = useState(initialQuantity);
+  const quantity = cartItem ? cartItem.quantity : 0;
 
   const increase = () => {
     if (quantity === 0) {
@@ -26,17 +25,10 @@ export const ProductListItem = ({
     } else {
       incrementItem(product.id);
     }
-    setQuantity(prev => prev + 1);
   };
 
   const decrease = () => {
-    if (quantity > 1) {
-      decrementItem(product.id);
-      setQuantity(prev => prev - 1);
-    } else {
-      decrementItem(product.id);
-      setQuantity(0);
-    }
+    decrementItem(product.id);
   };
 
   return (
@@ -59,8 +51,8 @@ export const ProductListItem = ({
       {product.Status !== 'out of stock' && (
         <View style={styles.cartControls}>
           {quantity === 0 ? (
-            <Pressable style={styles.plusButton} onPress={increase}>
-              <Text style={styles.plusText}>+</Text>
+            <Pressable style={styles.addButton} onPress={increase}>
+              <Text style={styles.addButtonText}>Add to cart</Text>
             </Pressable>
           ) : (
             <View style={styles.quantityContainer}>
@@ -81,7 +73,7 @@ export const ProductListItem = ({
 
 const styles = StyleSheet.create({
   item: {
-    width: '50%',
+    width: '48%',
     backgroundColor: 'white',
     marginVertical: 8,
     borderRadius: 10,
@@ -117,23 +109,21 @@ const styles = StyleSheet.create({
     color: 'red',
   },
   cartControls: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    paddingHorizontal: 8,
     alignItems: 'center',
     marginTop: 4,
   },
-  plusButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 20,
+  addButton: {
+    width: '100%',
+    paddingVertical: 8,
+    borderRadius: 8,
     backgroundColor: 'lightgreen',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 4,
   },
-  plusText: {
+  addButtonText: {
     color: 'white',
-    fontSize: 20,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   quantityContainer: {

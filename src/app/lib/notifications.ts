@@ -11,6 +11,11 @@ function handleRegistrationError(errorMessage: string) {
   }
   
   async function registerForPushNotificationsAsync() {
+    if (Platform.OS === 'web') {
+      console.log('Push notifications are not supported on the web in this configuration.');
+      return;
+    }
+
     if (Platform.OS === 'android') {
       Notifications.setNotificationChannelAsync('default', {
         name: 'default',
@@ -52,4 +57,4 @@ function handleRegistrationError(errorMessage: string) {
     }
   }
 
-  export default  registerForPushNotificationsAsync
+  export { registerForPushNotificationsAsync };

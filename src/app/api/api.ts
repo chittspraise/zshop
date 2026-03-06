@@ -11,12 +11,13 @@ export const getProductsAndCategories = () => {
     queryKey: ['products', 'categories'],
     queryFn: async () => {
       const [products, categories] = await Promise.all([
-        supabase.from('product').select('*, Status'),
+        supabase.from('product').select('*'),
         supabase.from('category').select('*'),
       ]);
 
       if (products.error || categories.error) {
-        throw new Error('An error occurred while fetching data');
+        console.error('getProductsAndCategories error:', products.error, categories.error);
+        throw new Error(`An error occurred while fetching data: ${products.error?.message || ''} ${categories.error?.message || ''}`);
       }
 
       return { products: products.data, categories: categories.data };
@@ -24,13 +25,13 @@ export const getProductsAndCategories = () => {
   });
 }
 export const getMyOrders = () => {
-  const {
-    user: { id }
-  } = useAuth();
+  const { user } = useAuth();
+  const id = user?.id;
 
   return useQuery({
     queryKey: ['orders', id],
     queryFn: async () => {
+      if (!id) return null;
       const { data, error } = await supabase
         .from('order')
         .select('*, refunded_amount')
@@ -52,7 +53,7 @@ export const getProduct = (slug: string) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('product')
-        .select('*, Status')
+        .select('*')
         .eq('slug', slug)
         .single();
 
@@ -77,16 +78,18 @@ export const getCategoriesAndProducts = (categorySlug: string) => {
         .single();
 
       if (categoryError || !category) {
-        throw new Error('An error occurred while fetching data');
+        console.error('getCategoriesAndProducts category error:', categoryError);
+        throw new Error(`An error occurred while fetching category: ${categoryError?.message || 'Not found'}`);
       }
 
       const { data: products, error: productsError } = await supabase
         .from('product')
-        .select('*, Status')
+        .select('*')
         .eq('category', category.id);
 
       if (productsError) {
-        throw new Error('An error occurred while fetching data');
+        console.error('getCategoriesAndProducts products error:', productsError);
+        throw new Error(`An error occurred while fetching products: ${productsError?.message}`);
       }
 
       return { category, products };
@@ -95,14 +98,14 @@ export const getCategoriesAndProducts = (categorySlug: string) => {
 }
 
 export const getMyProfile = () => {
-  const {
-    user: { id },
-  } = useAuth();
+  const { user } = useAuth();
+  const id = user?.id;
 
   return useQuery({
     queryKey: ['my-profile', id],
     enabled: !!id,
     queryFn: async () => {
+      if (!id) return null;
       const { data, error } = await supabase
         .from('profile')
         .select('user_id, wallet_balance, address, first_name, phone_number,delivery_note')
@@ -127,15 +130,15 @@ export const getMyProfile = () => {
 
 
 export const createOrder = () => {
-  const {
-    user: { id },
-  } = useAuth();
+  const { user } = useAuth();
+  const id = user?.id;
 
   const slug = generateOrderSlug();
   const queryClient = useQueryClient();
 
   return useMutation({
     async mutationFn({ totalPrice }: { totalPrice: number }) {
+      if (!id) throw new Error("User not authenticated");
       const { data, error } = await supabase
         .from('order')
         .insert({
@@ -152,6 +155,8 @@ export const createOrder = () => {
         throw new Error(
           'An error occurred while creating order: ' + error.message
         );
+
+      if (!data) throw new Error('Order creation failed: No data returned.');
 
       return data;
     },
@@ -191,16 +196,17 @@ export const createOrderItem = () => {
 }
 
 export const getMyOrder = (slug: string) => {
-  const {
-    user: { id },
-  } = useAuth();
+  const { user } = useAuth();
+  const id = user?.id;
 
   return useQuery({
     queryKey: ['orders', slug],
+    enabled: !!id,
     queryFn: async () => {
+      if (!id) return null;
       const { data, error } = await supabase
         .from('order')
-        .select('*, order_item(*,status, products:product(*, Status))')
+        .select('*, order_item(*,status, products:product(*))')
         .eq('slug', slug)
         .eq('user', id)
         .single();

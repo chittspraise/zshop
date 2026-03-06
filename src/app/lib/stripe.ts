@@ -1,12 +1,5 @@
-// 1 setup payment sheet
-// 2 Open stripe checkout form
-
-import {
-  initPaymentSheet,
-  presentPaymentSheet,
-} from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
-import { CollectionMode } from '@stripe/stripe-react-native/lib/typescript/src/types/PaymentSheet';
 
 const fetchStripekeys = async (totalAmount: number) => {
   const { data, error } = await supabase.functions.invoke('stripe-checkout', {
@@ -21,6 +14,13 @@ const fetchStripekeys = async (totalAmount: number) => {
 };
 
 export const setupStripePaymentSheet = async (totalAmount: number) => {
+  if (Platform.OS === 'web') {
+    console.warn("Stripe payment sheet is not currently supported on the web platform.");
+    return;
+  }
+
+  const { initPaymentSheet } = require('@stripe/stripe-react-native');
+
   // Fetch paymentIntent and publishable key from server
   const { paymentIntent, publicKey, ephemeralKey, customer } =
     await fetchStripekeys(totalAmount);
@@ -35,15 +35,20 @@ export const setupStripePaymentSheet = async (totalAmount: number) => {
     customerId: customer,
     customerEphemeralKeySecret: ephemeralKey,
     billingDetailsCollectionConfiguration: {
-      name: 'always' as CollectionMode,
-      phone: 'always' as CollectionMode,
-      email:'always' as CollectionMode,
+      name: 'always',
+      phone: 'always',
+      email: 'always',
     },
-    
   });
 };
 
 export const openStripeCheckout = async () => {
+  if (Platform.OS === 'web') {
+    console.warn("Stripe checkout is not currently supported on the web platform.");
+    return false;
+  }
+
+  const { presentPaymentSheet } = require('@stripe/stripe-react-native');
   const { error } = await presentPaymentSheet();
 
   if (error) {

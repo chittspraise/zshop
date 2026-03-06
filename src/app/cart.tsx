@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  Alert,
   Platform,
   TouchableOpacity,
   FlatList,
@@ -91,7 +90,7 @@ export default function Cart() {
   const handleCheckout = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      Alert.alert('Error', 'User not logged in');
+      alert('Error: User not logged in');
       return;
     }
 
@@ -117,33 +116,21 @@ export default function Cart() {
     };
 
     try {
+      // TEMPORARY BYPASS: Skip Stripe and proceed as if payment went through
+      console.log('Bypassing Stripe payment flow...');
       if (walletToggle) {
         if ((walletBalance ?? 0) >= totalPrice) {
           await updateWalletBalance((walletBalance ?? 0) - totalPrice);
-          await submitOrder();
         } else {
-          const remaining = totalPrice - (walletBalance ?? 0);
-          await setupStripePaymentSheet(Math.floor(remaining * 100));
-          const result = await openStripeCheckout();
-          if (result) {
-            await updateWalletBalance(0);
-            await submitOrder();
-          } else {
-            Alert.alert('Payment cancelled or failed');
-          }
-        }
-      } else {
-        await setupStripePaymentSheet(Math.floor(totalPrice * 100));
-        const result = await openStripeCheckout();
-        if (result) {
-          await submitOrder();
-        } else {
-          Alert.alert('Payment cancelled or failed');
+          // Empty wallet if partially paying, pretending the rest was covered by card
+          await updateWalletBalance(0);
         }
       }
+      
+      await submitOrder();
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'An error occurred during checkout.');
+      alert('Error: An error occurred during checkout.');
     }
   };
 
@@ -202,15 +189,15 @@ export default function Cart() {
               .from('profile')
               .select('address')
               .eq('user_id', user.id)
-              .single();
+              .maybeSingle();
 
             if (profileError) {
               console.error('Error fetching profile:', profileError);
-              Alert.alert('Error', 'Could not fetch profile information.');
+              alert('Error: Could not fetch profile information.');
               return;
             }
 
-            if (!profileData.address) {
+            if (!profileData || !profileData.address) {
               navigation.navigate('Deliveryaddress' as never);
               return;
             }

@@ -26,7 +26,7 @@ const Home = () => {
         ListHeaderComponent={<ListHeader categories={data.categories} />}
         contentContainerStyle={styles.flatListContent}
         columnWrapperStyle={styles.flatListColumn}
-        style={{paddingHorizontal: 10, paddingVertical: 5}}
+        style={{paddingVertical: 5}}
       />
     
     </View> 
@@ -43,6 +43,7 @@ const styles = StyleSheet.create({
   },
   flatListColumn: {
     justifyContent: 'space-between',
+    paddingHorizontal: 10,
   },
   backgroundImage: {
     flex: 1,
