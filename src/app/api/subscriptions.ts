@@ -27,7 +27,7 @@ export const useOrderUpdateSubscription = () => {
         if (profilesError) {
           console.error("Error fetching profiles:", profilesError);
         } else {
-          queryClient.setQueryData(["profiles"], profiles);
+          queryClient.setQueryData(["my-profile"], profiles);
         }
 
         if (productsError) {
@@ -50,7 +50,7 @@ export const useOrderUpdateSubscription = () => {
         { event: "INSERT", schema: "public", table: "order" },
         (payload) => {
           console.log("New order inserted!", payload);
-          queryClient.refetchQueries({ queryKey: ["orders"], active: true });
+          queryClient.invalidateQueries({ queryKey: ["orders"] });
         }
       )
       .on(
@@ -58,7 +58,7 @@ export const useOrderUpdateSubscription = () => {
         { event: "UPDATE", schema: "public", table: "order" },
         (payload) => {
           console.log("Order updated!", payload);
-          queryClient.refetchQueries({ queryKey: ["orders"], active: true });
+          queryClient.invalidateQueries({ queryKey: ["orders"] });
         }
       )
       // Profiles
@@ -67,7 +67,7 @@ export const useOrderUpdateSubscription = () => {
         { event: "INSERT", schema: "public", table: "profile" },
         (payload) => {
           console.log("New profile inserted!", payload);
-          queryClient.refetchQueries({ queryKey: ["profiles"], active: true });
+          queryClient.invalidateQueries({ queryKey: ["my-profile"] });
         }
       )
       .on(
@@ -75,7 +75,7 @@ export const useOrderUpdateSubscription = () => {
         { event: "UPDATE", schema: "public", table: "profile" },
         (payload) => {
           console.log("Profile updated!", payload);
-          queryClient.refetchQueries({ queryKey: ["profiles"], active: true });
+          queryClient.invalidateQueries({ queryKey: ["my-profile"] });
         }
       )
       // Products
@@ -84,7 +84,7 @@ export const useOrderUpdateSubscription = () => {
         { event: "INSERT", schema: "public", table: "product" },
         (payload) => {
           console.log("New product inserted!", payload);
-          queryClient.refetchQueries({ queryKey: ["products"], active: true });
+          queryClient.invalidateQueries({ queryKey: ["products"] });
         }
       )
       .on(
@@ -92,7 +92,7 @@ export const useOrderUpdateSubscription = () => {
         { event: "UPDATE", schema: "public", table: "product" },
         (payload) => {
           console.log("Product updated!", payload);
-          queryClient.refetchQueries({ queryKey: ["products"], active: true });
+          queryClient.invalidateQueries({ queryKey: ["products"] });
         }
       )
       .subscribe();

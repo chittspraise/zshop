@@ -11,6 +11,7 @@ import {
   Modal,
   StyleSheet,
   Platform,
+  SafeAreaView,
 } from 'react-native';
 import * as Location from 'expo-location';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -20,6 +21,11 @@ import { useRouter } from 'expo-router';
 
 // Define Region type here to avoid importing from react-native-maps on web
 interface Region {
+  latitude: number;
+  longitude: number;
+}
+
+interface Coordinates {
   latitude: number;
   longitude: number;
 }

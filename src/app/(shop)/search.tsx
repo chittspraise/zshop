@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, FlatList, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView } from 'react-native';
+import {
+  View,
+  TextInput,
+  FlatList,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  SafeAreaView,
+  ActivityIndicator,
+  Keyboard,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { createClient } from '@supabase/supabase-js';
 import { Link } from 'expo-router';
-
-// Supabase setup
-const supabaseUrl = 'https://nlwtuqszbnuvrmhjcbcp.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sd3R1cXN6Ym51dnJtaGpjYmNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIyMjg1MzcsImV4cCI6MjA0NzgwNDUzN30.EVnrm6YinT_uhTHuF5CAOmhVN9t6doWw6bYPxax6WzI';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from '../lib/supabase'; // Import central correct Supabase client
 
 // Types
 type Category = {
@@ -24,7 +30,7 @@ type Product = {
   id: number;
   created_at: string;
   title: string;
-  slug: string;
+  slug: string | null;
   imagesUrl: string[];
   price: number;
   heroImage: string;
@@ -39,29 +45,25 @@ const SearchScreen: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Fetch products from Supabase
   const fetchProducts = async () => {
     const { data, error } = await supabase.from('product').select('*');
-
     if (error) {
       console.error('Error fetching products:', error);
       throw new Error('Failed to fetch products: ' + error.message);
     }
-
-
     return data;
   };
 
   // Fetch categories from Supabase
   const fetchCategories = async () => {
     const { data, error } = await supabase.from('category').select('*');
-
     if (error) {
       console.error('Error fetching categories:', error);
       throw new Error('Failed to fetch categories: ' + error.message);
     }
-
     return data;
   };
 
@@ -69,38 +71,40 @@ const SearchScreen: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
         const fetchedProducts = await fetchProducts();
         const fetchedCategories = await fetchCategories();
-        setProducts(fetchedProducts);
-        setCategories(fetchedCategories);
+        setProducts(fetchedProducts || []);
+        setCategories(fetchedCategories || []);
       } catch (error) {
         console.error('Failed to fetch products or categories:', error);
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
-  // Handle search functionality
+  // Handle search functionality using substring matching (.includes)
   const handleSearch = () => {
-    const query = searchQuery.toLowerCase();
-    const filteredProducts = products.filter(product =>
-      product.title.toLowerCase().startsWith(query)
+    const query = searchQuery.trim().toLowerCase();
+    if (query === '') {
+      setFilteredProducts([]);
+      setFilteredCategories([]);
+      return;
+    }
+    const filteredProd = products.filter(product =>
+      product.title.toLowerCase().includes(query)
     );
-    const filteredCategories = categories.filter(category =>
-      category.name.toLowerCase().startsWith(query)
+    const filteredCat = categories.filter(category =>
+      category.name.toLowerCase().includes(query)
     );
-    setFilteredProducts(filteredProducts);
-    setFilteredCategories(filteredCategories);
+    setFilteredProducts(filteredProd);
+    setFilteredCategories(filteredCat);
   };
 
   useEffect(() => {
-    if (searchQuery === '') {
-      setFilteredProducts([]);
-      setFilteredCategories([]);
-    } else {
-      handleSearch();
-    }
+    handleSearch();
   }, [searchQuery, products, categories]);
 
   // Get category name for a product
@@ -109,59 +113,131 @@ const SearchScreen: React.FC = () => {
     return category ? category.name : 'Unknown';
   };
 
+  const renderProductItem = ({ item }: { item: Product }) => (
+    <Link asChild href={`/product/${item.slug}`}>
+      <TouchableOpacity style={styles.productCard}>
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: item.heroImage }} style={styles.productImage} />
+        </View>
+        <View style={styles.productInfo}>
+          <Text numberOfLines={1} style={styles.productTitle}>{item.title}</Text>
+          <Text style={styles.categoryBadge}>{getCategoryName(item.category)}</Text>
+          <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
+        </View>
+      </TouchableOpacity>
+    </Link>
+  );
+
+  const renderCategoryChip = ({ item }: { item: Category }) => (
+    <Link asChild href={`/categories/${item.slug}`}>
+      <TouchableOpacity style={styles.categoryChip}>
+        <Image source={{ uri: item.imageUrl }} style={styles.categoryChipImage} />
+        <Text style={styles.categoryChipText}>{item.name}</Text>
+      </TouchableOpacity>
+    </Link>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Modern Pill Search Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={24} color="black" />
+            <Ionicons name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search all products or categories..."
-            value={searchQuery}
-            onChangeText={text => setSearchQuery(text)}
-            onSubmitEditing={handleSearch}
-          />
-          <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
-            <Ionicons name="search" size={24} color="black" />
-          </TouchableOpacity>
+          
+          <View style={styles.searchBarContainer}>
+            <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search items, brands, categories..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={() => Keyboard.dismiss()}
+              returnKeyType="search"
+            />
+            {searchQuery !== '' && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <Ionicons name="close-circle" size={20} color="#aaa" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {searchQuery !== '' && (
-          <>
-            <Text style={styles.sectionTitle}>Categories</Text>
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color="green" />
+          </View>
+        ) : searchQuery === '' ? (
+          /* Initial State: Showcase active browse elements without headings */
+          <View style={styles.flex}>
+            {/* Scrollable Horizontal Categories Chips */}
+            <View style={styles.horizontalChipsContainer}>
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={categories}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={renderCategoryChip}
+                contentContainerStyle={styles.chipsScroll}
+              />
+            </View>
+
+            {/* Popular/Discover products grid */}
             <FlatList
-              data={filteredCategories}
+              key="discover_grid"
+              data={products.slice(0, 10)}
               keyExtractor={(item) => item.id.toString()}
-
-              renderItem={({ item }) => (
-                <Link asChild href={`/categories/${item.slug}`}>
-                  <TouchableOpacity style={styles.card}>
-                    <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
-                    <Text style={styles.cardTitle}>{item.name}</Text>
-                  </TouchableOpacity>
-                </Link>
-              )}
-
+              renderItem={renderProductItem}
+              numColumns={2}
+              columnWrapperStyle={styles.gridRow}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.gridScroll}
             />
+          </View>
+        ) : (
+          /* Search Results State */
+          <View style={styles.flex}>
+            {/* Horizontal matched categories if any */}
+            {filteredCategories.length > 0 && (
+              <View style={styles.matchedCategoriesSection}>
+                <Text style={styles.resultsSubtitle}>Matching Categories</Text>
+                <FlatList
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  data={filteredCategories}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={renderCategoryChip}
+                  contentContainerStyle={styles.chipsScroll}
+                />
+              </View>
+            )}
 
-            <Text style={styles.sectionTitle}>Products</Text>
-            <FlatList
-              data={filteredProducts}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <Link asChild href={`/product/${item.slug}`}>
-                  <TouchableOpacity style={styles.card}>
-                    <Image source={{ uri: item.heroImage }} style={styles.cardImage} />
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    <Text>Category: {getCategoryName(item.category)}</Text>
-                    <Text>R{item.price}</Text>
-                  </TouchableOpacity>
-                </Link>
-              )}
-            />
-          </>
+            {/* Results Header */}
+            <Text style={styles.sectionTitle}>
+              Search Results ({filteredProducts.length})
+            </Text>
+
+            {filteredProducts.length > 0 ? (
+              <FlatList
+                key="results_grid"
+                data={filteredProducts}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={renderProductItem}
+                numColumns={2}
+                columnWrapperStyle={styles.gridRow}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.gridScroll}
+              />
+            ) : (
+              <View style={styles.centered}>
+                <Ionicons name="search-outline" size={64} color="#ccc" style={styles.noResultsIcon} />
+                <Text style={styles.noResultsText}>No products found matching "{searchQuery}"</Text>
+                <Text style={styles.noResultsSubtext}>Try adjusting your spelling or searching for a broader term.</Text>
+              </View>
+            )}
+          </View>
         )}
       </View>
     </SafeAreaView>
@@ -171,60 +247,192 @@ const SearchScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fa',
   },
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  flex: {
+    flex: 1,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    marginTop: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginVertical: 12,
   },
   backButton: {
-    marginRight: 10,
+    padding: 8,
+    marginRight: 4,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  searchBarContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingHorizontal: 12,
+    height: 46,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 4,
   },
-  searchButton: {
-    marginLeft: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+  clearButton: {
+    padding: 4,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginVertical: 10,
+    color: '#222',
+    marginTop: 16,
+    marginBottom: 10,
+    letterSpacing: 0.2,
   },
-  card: {
-    marginBottom: 15,
-    padding: 10,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
+  horizontalChipsContainer: {
+    height: 65,
+    marginVertical: 8,
+  },
+  chipsScroll: {
+    paddingBottom: 8,
+    gap: 10,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    elevation: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+  },
+  categoryChipImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 8,
+    resizeMode: 'cover',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  gridScroll: {
+    paddingBottom: 24,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  productCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '48%',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eee',
     elevation: 2,
-    width: '70%',
-    
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
-  cardImage: {
+  imageContainer: {
+    backgroundColor: '#fff',
     width: '100%',
-    height: 200,
-    borderRadius: 8,
+    height: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
   },
-  cardTitle: {
+  productImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  productInfo: {
+    padding: 12,
+    backgroundColor: '#fdfdfd',
+    borderTopWidth: 1,
+    borderColor: '#f1f1f1',
+  },
+  productTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2b2b2b',
+    marginBottom: 4,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#eafaf1',
+    color: 'green',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  productPrice: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginTop: 10,
+    color: '#1BC464',
+  },
+  matchedCategoriesSection: {
+    marginBottom: 8,
+  },
+  resultsSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 8,
+  },
+  noResultsIcon: {
+    marginBottom: 16,
+  },
+  noResultsText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#495057',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  noResultsSubtext: {
+    fontSize: 14,
+    color: '#868e96',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

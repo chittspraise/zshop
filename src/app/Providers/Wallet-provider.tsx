@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from './auth-provider';
 
 type WalletContextType = {
   walletBalance: number | null;
@@ -15,6 +16,7 @@ const WalletContext = createContext<WalletContextType>({
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const { session } = useAuth();
 
   const fetchWalletBalance = async () => {
     try {
@@ -22,6 +24,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const { data: user, error: userError } = await supabase.auth.getUser();
       if (userError || !user?.user) {
         console.error('Error fetching user or user not logged in:', userError);
+        setWalletBalance(null); // Clear balance if logged out
         return;
       }
 
@@ -32,7 +35,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .from('profile')
         .select('wallet_balance')
         .eq('user_id', userId)
-        .single(); // Ensures only one row is fetched
+        .maybeSingle(); // Prevents throwing if missing
 
       if (error) {
         console.error('Error fetching wallet balance:', error);
@@ -41,6 +44,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       if (data && typeof data.wallet_balance !== 'undefined') {
         setWalletBalance(data.wallet_balance);
+      } else {
+        setWalletBalance(null);
       }
     } catch (err) {
       console.error('Unexpected error fetching wallet balance:', err);
@@ -99,7 +104,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return () => {
       subscription.unsubscribe(); // Unsubscribe on component unmount
     };
-  }, []);
+  }, [session]); // Re-fetch balance instantly whenever session changes (logs in/out)
 
   return (
     <WalletContext.Provider value={{ walletBalance, refreshWallet: fetchWalletBalance, updateWalletBalance }}>

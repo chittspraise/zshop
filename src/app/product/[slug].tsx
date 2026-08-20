@@ -110,8 +110,8 @@ const ProductDetails = () => {
         <Text style={styles.title}>{product.title}</Text>
 
         <View style={styles.priceContainer}>
-          <Text style={styles.price}>Unit Price: R{product.price.toFixed(2)}</Text>
-          <Text style={styles.price}>Total Price: R{totalPrice}</Text>
+          <Text style={styles.price}>Unit Price: ${product.price.toFixed(2)}</Text>
+          <Text style={styles.price}>Total Price: ${totalPrice}</Text>
         </View>
 
         <Text style={styles.description}>{product.description}</Text>
@@ -173,7 +173,7 @@ const ProductDetails = () => {
               <TouchableOpacity style={styles.relatedCard} onPress={() => {/* navigate to item.slug */}}>
                 <Image source={{ uri: item.heroImage }} style={styles.relatedImage} />
                 <Text numberOfLines={1} style={styles.relatedTitle}>{item.title}</Text>
-                <Text style={styles.relatedPrice}>R{item.price.toFixed(2)}</Text>
+                <Text style={styles.relatedPrice}>${item.price.toFixed(2)}</Text>
               </TouchableOpacity>
             )}
           />
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007bff',
+    backgroundColor: '#1BC464',
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 8,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   },
   addToCartButton: {
     flex: 1,
-    backgroundColor: 'green',
+    backgroundColor: '#1BC464',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

@@ -8,19 +8,22 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "sdk-52"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "sdk-52"
       }
     },
     "production": {
       "distribution": "store",
       "android": {
-        "buildType": "apk"   // 👈 Force APK here
+        "buildType": "apk",
+        "image": "sdk-52"
       },
       "autoIncrement": true
     }

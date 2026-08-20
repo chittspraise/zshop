@@ -16,8 +16,8 @@ const AccountScreen = () => {
   const [user, setUser] = useState<User | null>(null);
   const [firstName, setFirstName] = useState<string | null>('No First Name');
   const [phoneNumber, setPhoneNumber] = useState<string | null>('No Phone Number');
-  const [address,setAddress]= useState<string | null>('No Address')
-  const[deliveryNote]=useState<string|null>('no note')
+  const [address,setAddress]= useState<string | null>('No Address');
+  const [deliveryNote, setDeliveryNote] = useState<string|null>('no note');
   const { walletBalance } = useWallet();
   const navigation = useNavigation();
 
@@ -59,7 +59,7 @@ const AccountScreen = () => {
           setFirstName(singleUser.first_name || 'No First Name');
           setPhoneNumber(singleUser.phone_number || 'No Phone Number');
           setAddress(singleUser.address || 'No Address');
-          SetDeliveryAddress(singleUser.delivery_note||" no dlivery_note")
+          setDeliveryNote(singleUser.delivery_note || " no dlivery_note");
         } else {
           console.error("No user metadata found");
         }
@@ -127,7 +127,7 @@ const AccountScreen = () => {
             <Text style={styles.sectionTitle}> Wallet Balance</Text>
           </View>
           <Text style={styles.balance}>
-            R{walletBalance !== null ? walletBalance.toFixed(2) : '0.00'}
+            ${walletBalance !== null ? walletBalance.toFixed(2) : '0.00'}
           </Text>
         
         </Card.Content>

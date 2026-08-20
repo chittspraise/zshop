@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,19 @@ import {
   FlatList,
   Image,
   StyleSheet,
+  SafeAreaView,
+  TextInput,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useCartStore } from './cart-store';
 import { createOrder, createOrderItem } from './api/api';
 import { openStripeCheckout, setupStripePaymentSheet } from './lib/stripe';
 import { useWallet } from './Providers/Wallet-provider';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { supabase } from './lib/supabase';
+import { useToast } from 'react-native-toast-notifications';
+import { Alert } from 'react-native';
 
 type CartItemType = {
   id: number;
@@ -42,7 +47,7 @@ const CartItem = ({
       <Image source={{ uri: item.heroImage }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
         <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemPrice}>R{item.price.toFixed(2)}</Text>
+        <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
         <View style={styles.quantityContainer}>
           <TouchableOpacity
             onPress={() => onDecrement(item.id)}
@@ -80,25 +85,91 @@ export default function Cart() {
     resetCart,
   } = useCartStore();
 
+  const router = useRouter();
   const navigation = useNavigation();
+  const toast = useToast();
   const { mutateAsync: createSupabaseOrder } = createOrder();
   const { mutateAsync: createSupabaseOrderItem } = createOrderItem();
   const { walletBalance, updateWalletBalance } = useWallet();
 
   const [walletToggle, setWalletToggle] = useState(false);
+  const [recipientAddress, setRecipientAddress] = useState<{
+    recipientAddress: string;
+    latitude: number;
+    longitude: number;
+    verified: boolean;
+  } | null>(null);
+  const [groceryNotes, setGroceryNotes] = useState('');
+
+  // Load recipient address on focus
+  useEffect(() => {
+    const loadAddress = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('recipient_address');
+        if (stored) {
+          setRecipientAddress(JSON.parse(stored));
+        } else {
+          setRecipientAddress(null);
+        }
+      } catch (e) {
+        console.error('Error loading recipient address in cart:', e);
+      }
+    };
+    loadAddress();
+    const unsubscribe = navigation.addListener('focus', loadAddress);
+    return unsubscribe;
+  }, [navigation]);
 
   const handleCheckout = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      alert('Error: User not logged in');
+      toast.show('Error: User not logged in', { type: 'danger', placement: 'top' });
       return;
     }
 
+    let finalAddress = '';
+    let finalLat: number | undefined = undefined;
+    let finalLng: number | undefined = undefined;
+
+    if (recipientAddress) {
+      finalAddress = recipientAddress.recipientAddress;
+      finalLat = recipientAddress.latitude;
+      finalLng = recipientAddress.longitude;
+    } else {
+      // Fetch full profile info for order dispatch fallback
+      const { data: profileData, error: profileError } = await supabase
+        .from('profile')
+        .select('address, latitude, longitude')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (profileError || !profileData || !profileData.address) {
+        toast.show('Error: Delivery address is missing or invalid.', {
+          type: 'danger',
+          placement: 'top',
+        });
+        return;
+      }
+      finalAddress = profileData.address;
+      finalLat = profileData.latitude ?? undefined;
+      finalLng = profileData.longitude ?? undefined;
+    }
+
     const totalPrice = parseFloat(getTotalPrice());
+    const description = items
+      .map(item => `${item.quantity}x ${item.title} ($${(item.price * item.quantity).toFixed(2)})`)
+      .join('\n');
 
     const submitOrder = async () => {
       await createSupabaseOrder(
-        { totalPrice },
+        {
+          totalPrice,
+          description,
+          delivery_address: finalAddress,
+          latitude: finalLat,
+          longitude: finalLng,
+          grocery_notes: groceryNotes,
+        },
         {
           onSuccess: async (data) => {
             await createSupabaseOrderItem({
@@ -108,111 +179,193 @@ export default function Cart() {
                 quantity: item.quantity,
               })),
             });
-            alert('Order created successfully');
+
+            // Log wallet transaction if wallet was used
+            if (walletToggle) {
+              const walletPaidAmount = (walletBalance ?? 0) >= totalPrice ? totalPrice : (walletBalance ?? 0);
+              await (supabase as any).from('wallet_transactions').insert({
+                user_id: user.id,
+                amount: -walletPaidAmount,
+                type: 'payment',
+                description: `Payment for order: ${data.slug}`
+              });
+            }
+
+            toast.show('🎉 Payment successful! Your order has been placed.', {
+              type: 'success',
+              placement: 'top',
+              duration: 3000,
+            });
             resetCart();
+            router.replace('/');
           },
         }
       );
     };
 
     try {
-      // TEMPORARY BYPASS: Skip Stripe and proceed as if payment went through
-      console.log('Bypassing Stripe payment flow...');
       if (walletToggle) {
         if ((walletBalance ?? 0) >= totalPrice) {
+          // Covered entirely by wallet, no Stripe needed
           await updateWalletBalance((walletBalance ?? 0) - totalPrice);
         } else {
-          // Empty wallet if partially paying, pretending the rest was covered by card
+          // Covered partially by wallet, remaining covered by Stripe
+          const remainingAmount = totalPrice - (walletBalance ?? 0);
+          await setupStripePaymentSheet(Math.round(remainingAmount * 100));
+          const success = await openStripeCheckout();
+          if (!success) return;
           await updateWalletBalance(0);
         }
+      } else {
+        // Covered entirely by Stripe card
+        await setupStripePaymentSheet(Math.round(totalPrice * 100));
+        const success = await openStripeCheckout();
+        if (!success) return;
       }
       
       await submitOrder();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Error: An error occurred during checkout.');
+      toast.show(error.message || 'Error: An error occurred during checkout.', {
+        type: 'danger',
+        placement: 'top',
+      });
     }
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <View style={styles.container}>
+        <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
 
-      <FlatList
-        data={items}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => (
-          <CartItem
-            item={item}
-            onRemove={removeItem}
-            onIncrement={incrementItem}
-            onDecrement={decrementItem}
-          />
-        )}
-        contentContainerStyle={styles.cartList}
-      />
+        <FlatList
+          data={items}
+          keyExtractor={item => item.id.toString()}
+          renderItem={({ item }) => (
+            <CartItem
+              item={item}
+              onRemove={removeItem}
+              onIncrement={incrementItem}
+              onDecrement={decrementItem}
+            />
+          )}
+          contentContainerStyle={styles.cartList}
+        />
 
-      <TouchableOpacity onPress={() => navigation.navigate('Deliveryaddress' as never)}>
-        <Text style={{ color: 'red', marginBottom: 10 }}>
-          Please make sure your Address is correct or set it here
-        </Text>
-      </TouchableOpacity>
-
-      <View style={styles.footer}>
-        <Text style={styles.totalText}>Total: R{getTotalPrice()}</Text>
-
-        <View style={styles.walletToggleContainer}>
+        {recipientAddress ? (
           <TouchableOpacity
-            style={styles.walletToggleButton}
-            onPress={() => setWalletToggle(!walletToggle)}
+            onPress={() => navigation.navigate('RecipientAddressScreen' as never)}
+            style={styles.recipientCard}
           >
-            <Text
-              style={[
-                styles.walletToggleButtonText,
-                walletToggle && styles.walletToggleButtonTextActive,
-              ]}
-            >
-              Wallet Payment: {walletToggle ? 'On' : 'Off'}
+            <View style={styles.recipientCardHeader}>
+              <Text style={styles.recipientCardTitle}>Deliver to Recipient</Text>
+              <Text style={styles.recipientCardChange}>Change</Text>
+            </View>
+            <Text style={styles.recipientCardAddress} numberOfLines={2}>
+              {recipientAddress.recipientAddress}
             </Text>
           </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('RecipientAddressScreen' as never)}
+            style={styles.recipientCardEmpty}
+          >
+            <Text style={styles.recipientCardEmptyText}>
+              ⚠️ Set Recipient Delivery Address
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Grocery List Note Field */}
+        <View style={styles.notesContainer}>
+          <Text style={styles.notesLabel}>Grocery List Note</Text>
+          <View style={styles.notesWrapper}>
+            <TextInput
+              style={styles.notesInput}
+              placeholder="Write any other items or custom instructions here..."
+              placeholderTextColor="#94a3b8"
+              value={groceryNotes}
+              onChangeText={setGroceryNotes}
+              multiline
+              numberOfLines={2}
+            />
+          </View>
         </View>
 
-        <TouchableOpacity
-          onPress={async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-              Alert.alert('Error', 'User not logged in');
-              return;
-            }
+        <View style={styles.footer}>
+          <Text style={styles.totalText}>Total: ${getTotalPrice()}</Text>
 
-            const { data: profileData, error: profileError } = await supabase
-              .from('profile')
-              .select('address')
-              .eq('user_id', user.id)
-              .maybeSingle();
+          <View style={walletToggleContainerStyle.walletToggleContainer}>
+            <TouchableOpacity
+              style={styles.walletToggleButton}
+              onPress={() => setWalletToggle(!walletToggle)}
+            >
+              <Text
+                style={[
+                  styles.walletToggleButtonText,
+                  walletToggle && styles.walletToggleButtonTextActive,
+                ]}
+              >
+                Wallet Payment: {walletToggle ? 'On' : 'Off'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-            if (profileError) {
-              console.error('Error fetching profile:', profileError);
-              alert('Error: Could not fetch profile information.');
-              return;
-            }
+          <TouchableOpacity
+            onPress={async () => {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) {
+                Alert.alert('Error', 'User not logged in');
+                return;
+              }
 
-            if (!profileData || !profileData.address) {
-              navigation.navigate('Deliveryaddress' as never);
-              return;
-            }
+              if (!recipientAddress) {
+                // Fallback to check profile address
+                const { data: profileData, error: profileError } = await supabase
+                  .from('profile')
+                  .select('address')
+                  .eq('user_id', user.id)
+                  .maybeSingle();
 
-            handleCheckout();
-          }}
-          style={styles.checkoutButton}
-        >
-          <Text style={styles.checkoutButtonText}>Checkout</Text>
-        </TouchableOpacity>
+                if (profileError) {
+                  console.error('Error fetching profile:', profileError);
+                }
+
+                if (!profileData || !profileData.address) {
+                  Alert.alert(
+                    'Address Required',
+                    'Please select a delivery address for the recipient first.',
+                    [
+                      {
+                        text: 'Select Address',
+                        onPress: () => navigation.navigate('RecipientAddressScreen' as never),
+                      },
+                      { text: 'Cancel', style: 'cancel' },
+                    ]
+                  );
+                  return;
+                }
+              }
+
+              handleCheckout();
+            }}
+            style={styles.checkoutButton}
+          >
+            <Text style={styles.checkoutButtonText}>Checkout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
+// Separate container style to bypass style duplicate rule if any
+const walletToggleContainerStyle = {
+  walletToggleContainer: {
+    marginVertical: 10,
+    alignItems: 'center' as const,
+  }
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -303,10 +456,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  walletToggleContainer: {
-    marginVertical: 10,
-    alignItems: 'center',
-  },
   walletToggleButton: {
     padding: 10,
     backgroundColor: '#ccc',
@@ -317,5 +466,76 @@ const styles = StyleSheet.create({
   },
   walletToggleButtonTextActive: {
     color: 'green',
+  },
+  recipientCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#1BC464',
+    marginBottom: 16,
+  },
+  recipientCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  recipientCardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1BC464',
+    letterSpacing: 0.5,
+  },
+  recipientCardChange: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1BC464',
+  },
+  recipientCardAddress: {
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  recipientCardEmpty: {
+    backgroundColor: '#fff5f5',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#feb2b2',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recipientCardEmptyText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#c53030',
+  },
+  notesContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  notesWrapper: {
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  notesInput: {
+    fontSize: 13,
+    color: '#1e293b',
+    height: 48,
+    textAlignVertical: 'top',
   },
 });

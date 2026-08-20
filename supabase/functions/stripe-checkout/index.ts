@@ -25,7 +25,7 @@ Deno.serve(async req => {
 
   const paymentIntent = await stripe.paymentIntents.create({
     amount: totalAmount,
-    currency: 'zar',
+    currency: 'usd',
     customer, // This wil link the payment to the customer
   });
 

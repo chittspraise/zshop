@@ -5,18 +5,20 @@ import QueryProvider from './Providers/query-provider';
 import StripeProvider from './Providers/StripeProvider';
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, Platform, SafeAreaView, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet, Image } from 'react-native';
 import { useBackHandler } from '@react-native-community/hooks';
 import NotificationProvider from './Providers/notification-provider';
 import { WalletProvider } from './Providers/Wallet-provider';
 import * as Linking from 'expo-linking';
 import { supabase } from './lib/supabase';
 import FloatingCartOverlay from './floatingCartOverlay';
+import { Video, ResizeMode } from 'expo-av';
 
 export default function RootLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
+  const [videoFinished, setVideoFinished] = useState(false);
   useBackHandler(() => false);
 
   useEffect(() => {
@@ -60,6 +62,18 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [router, pathname]);
 
+  // Preload Auth background image on boot, and safety fallback timer (lets the person walk out completely)
+  useEffect(() => {
+    // Prefetch the remote background image so it's fully cached in memory when the video ends
+    Image.prefetch('https://www.blinkco.io/wp-content/uploads/2022/01/shopping-cart-full-of-food-on-yellow-background-g-2021-09-02-09-26-59-utc-1.jpg')
+      .catch(err => console.warn('Auth background prefetch failed:', err));
+
+    const timer = setTimeout(() => {
+      setVideoFinished(true);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, []);
+
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -68,45 +82,66 @@ export default function RootLayout() {
     );
   }
 
+  // Display Custom Cinematic Video Splash Screen
+  if (!videoFinished) {
+    return (
+      <View style={styles.videoSplashContainer}>
+        <StatusBar style="light" translucent backgroundColor="transparent" />
+        <Video
+          source={require('../../assets/images/Order for your loved ones, let them collect in minutes. eshop Bringing care closer..mp4')}
+          style={styles.videoSplash}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay
+          isMuted={true}
+          isLooping={false}
+          onPlaybackStatusUpdate={(status: any) => {
+            if (status.didJustFinish) {
+              setVideoFinished(true);
+            }
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <StatusBar style="light" backgroundColor="#000" />
-      <SafeAreaView style={styles.safeArea}>
-        <ToastProvider>
-          <AuthProvider>
-            <WalletProvider>
-              <QueryProvider>
-                <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}>
-                  <NotificationProvider>
-                    <View style={{ flex: 1 }}>
-                      <Stack
-                        screenOptions={{
-                          contentStyle: { backgroundColor: '#f5f5f5' },
-                          headerStyle: { backgroundColor: '#f5f5f5' },
-                          headerTitleStyle: { color: '#000' },
-                          headerTintColor: '#000',
-                        }}
-                      >
-                        <Stack.Screen name="(shop)" options={{ headerShown: false, title: 'Shop' }} />
-                        <Stack.Screen name="passwordreset" options={{ headerShown: false, title: 'Password Reset' }} />
-                        <Stack.Screen name="new-password" options={{ headerShown: false, title: 'New Password' }} />
-                        <Stack.Screen name="auth" options={{ headerShown: false, title: 'Auth' }} />
-                        <Stack.Screen name="product" options={{ headerShown: false, title: 'New Password' }} />
-                        <Stack.Screen name="categories" options={{ headerShown: false, title: 'categories' }} />
-                        <Stack.Screen name="cart" options={{ headerShown: false, title: 'cart' }} />
-                        <Stack.Screen name="Deliveryaddress" options={{ headerShown: false, title: 'My Address' }} />
-                      </Stack>
+      <StatusBar style="auto" translucent backgroundColor="transparent" />
+      <ToastProvider>
+        <AuthProvider>
+          <WalletProvider>
+            <QueryProvider>
+              <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}>
+                <NotificationProvider>
+                  <View style={{ flex: 1 }}>
+                    <Stack
+                      screenOptions={{
+                        contentStyle: { backgroundColor: '#f5f5f5' },
+                        headerStyle: { backgroundColor: '#f5f5f5' },
+                        headerTitleStyle: { color: '#000' },
+                        headerTintColor: '#000',
+                      }}
+                    >
+                      <Stack.Screen name="(shop)" options={{ headerShown: false, title: 'Shop' }} />
+                      <Stack.Screen name="passwordreset" options={{ headerShown: false, title: 'Password Reset' }} />
+                      <Stack.Screen name="new-password" options={{ headerShown: false, title: 'New Password' }} />
+                      <Stack.Screen name="auth" options={{ headerShown: false, title: 'Auth' }} />
+                      <Stack.Screen name="product" options={{ headerShown: false, title: 'New Password' }} />
+                      <Stack.Screen name="categories" options={{ headerShown: false, title: 'categories' }} />
+                      <Stack.Screen name="cart" options={{ headerShown: false, title: 'cart' }} />
+                      <Stack.Screen name="Deliveryaddress" options={{ headerShown: false, title: 'My Address' }} />
+                      <Stack.Screen name="RecipientAddressScreen" options={{ headerShown: false, title: 'Recipient Address' }} />
+                    </Stack>
 
-                      {/* Floating cart overlay rendered here */}
-                      <FloatingCartOverlay />
-                    </View>
-                  </NotificationProvider>
-                </StripeProvider>
-              </QueryProvider>
-            </WalletProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </SafeAreaView>
+                    {/* Floating cart overlay rendered here */}
+                    <FloatingCartOverlay />
+                  </View>
+                </NotificationProvider>
+              </StripeProvider>
+            </QueryProvider>
+          </WalletProvider>
+        </AuthProvider>
+      </ToastProvider>
     </View>
   );
 }
@@ -114,16 +149,20 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? 25 : 0,
+    backgroundColor: '#fff',
   },
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
+  },
+  videoSplashContainer: {
+    flex: 1,
+    backgroundColor: '#edd3bc', // Warm tan/peach background color matching the new intro video
+  },
+  videoSplash: {
+    width: '100%',
+    height: '100%',
   },
 });

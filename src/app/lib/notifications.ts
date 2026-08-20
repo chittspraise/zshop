@@ -6,8 +6,7 @@ import Constants from 'expo-constants';
 
 
 function handleRegistrationError(errorMessage: string) {
-    alert(errorMessage);
-    throw new Error(errorMessage);
+    console.warn('Push Notification Registration Error:', errorMessage);
   }
   
   async function registerForPushNotificationsAsync() {

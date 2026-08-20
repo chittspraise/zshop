@@ -108,7 +108,7 @@ export const getMyProfile = () => {
       if (!id) return null;
       const { data, error } = await supabase
         .from('profile')
-        .select('user_id, wallet_balance, address, first_name, phone_number,delivery_note')
+        .select('user_id, wallet_balance, address, first_name, last_name, phone_number,delivery_note')
         .eq('user_id', id)
         .maybeSingle();
 
@@ -137,17 +137,29 @@ export const createOrder = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    async mutationFn({ totalPrice }: { totalPrice: number }) {
+    async mutationFn(orderData: {
+      totalPrice: number;
+      description?: string;
+      delivery_address?: string;
+      latitude?: number;
+      longitude?: number;
+      grocery_notes?: string;
+    }) {
       if (!id) throw new Error("User not authenticated");
       const { data, error } = await supabase
         .from('order')
         .insert({
-          totalPrice,
+          totalPrice: orderData.totalPrice,
+          description: orderData.description,
+          delivery_address: orderData.delivery_address,
+          latitude: orderData.latitude,
+          longitude: orderData.longitude,
+          grocery_notes: orderData.grocery_notes,
           slug,
           user: id,
           status: 'Received',
           refunded_amount: 0
-        })
+        } as any)
         .select('*')
         .single();
 
@@ -206,7 +218,7 @@ export const getMyOrder = (slug: string) => {
       if (!id) return null;
       const { data, error } = await supabase
         .from('order')
-        .select('*, order_item(*,status, products:product(*))')
+        .select('*, order_item(*, products:product(*))')
         .eq('slug', slug)
         .eq('user', id)
         .single();
@@ -228,6 +240,7 @@ export const useUpsertMyProfile = () => {
       wallet_balance?: number;
       address?: string;
       first_name?: string;
+      last_name?: string;
       phone_number?: string;
       email?: string;
       delivery_note?: string;

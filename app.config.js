@@ -7,12 +7,11 @@ export default {
     scheme: "eshop",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: "./assets/images/finalicon.png",
     userInterfaceStyle: "automatic",
     splash: {
-      image: "./assets/images/Image_Editor.png",
       resizeMode: "contain",
-      backgroundColor: "#ffffff"
+      backgroundColor: "#f1b203"
     },
     ios: {
       supportsTablet: true,
@@ -25,10 +24,6 @@ export default {
       }
     },
     android: {
-      adaptiveIcon: {
-        foregroundImage: "./assets/images/Image_Editor.png",
-        backgroundColor: "#ffffff"
-      },
       package: "com.chitts.eshop",
       intentFilters: [
         {

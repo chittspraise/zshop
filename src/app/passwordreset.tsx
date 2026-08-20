@@ -6,6 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  ScrollView,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Toast } from 'react-native-toast-notifications';
 import { supabase } from './lib/supabase'; // Adjust if needed
@@ -63,72 +67,110 @@ export default function PasswordReset() {
   };
 
   return (
-    
-    <View style={styles.container}>
-      <Text style={styles.title}>Reset Your Password</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Enter your email"
-        placeholderTextColor="#999"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleResetPassword}
-        disabled={loading}
+    <SafeAreaView style={styles.safeContainer}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardContainer}
       >
-        {loading ? (
-          <ActivityIndicator color="#ffffff" />
-        ) : (
-          <Text style={styles.buttonText}>Send Reset Link</Text>
-        )}
-      </TouchableOpacity>
-    </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.container}>
+            <Text style={styles.title}>Reset Your Password</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              placeholderTextColor="#888"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleResetPassword}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>Send Reset Link</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeContainer: {
     flex: 1,
+    backgroundColor: '#0f172a', // Premium dark slate background
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#000',
+    padding: 20,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 440,
+    alignItems: 'center',
   },
   title: {
     fontSize: 26,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#fff',
     marginBottom: 30,
+    letterSpacing: -0.5,
   },
   input: {
-    width: '90%',
-    padding: 14,
+    width: '100%',
+    height: 48,
+    paddingHorizontal: 16,
     marginBottom: 20,
-    backgroundColor: '#1c1c1e',
-    borderRadius: 8,
+    backgroundColor: '#1e293b',
+    borderColor: '#334155',
+    borderWidth: 1.5,
+    borderRadius: 10,
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
   },
   button: {
-    backgroundColor: 'green',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-    width: '90%',
+    backgroundColor: '#1BC464', // Signature food-app green
+    height: 48,
+    borderRadius: 10,
+    width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1BC464',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
   },
   buttonDisabled: {
-    backgroundColor: '#555',
+    backgroundColor: '#334155',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   buttonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: 'white',
   },
 });
+

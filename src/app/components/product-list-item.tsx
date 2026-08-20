@@ -40,7 +40,7 @@ export const ProductListItem = ({
           </View>
           <View style={styles.itemTextContainer}>
             <Text style={styles.itemTitle}>{product.title}</Text>
-            <Text style={styles.itemPrice}>R{product.price.toFixed(2)}</Text>
+            <Text style={styles.itemPrice}>${product.price.toFixed(2)}</Text>
             {product.Status === 'out of stock' && (
               <Text style={styles.productStatus}>Out of stock</Text>
             )}

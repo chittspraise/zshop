@@ -129,6 +129,12 @@ const styles: { [key: string]: any } = StyleSheet.create({
     backgroundColor: 'Orange',
   },
   statusBadge_Received: {
-    backgroundColor: 'green',
+    backgroundColor: '#FFC107', // Yellow
+  },
+  statusBadge_Ready: {
+    backgroundColor: '#28A745', // Green
+  },
+  statusBadge_Declined: {
+    backgroundColor: '#DC3545', // Red
   },
 });

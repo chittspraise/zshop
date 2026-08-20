@@ -70,7 +70,7 @@ const OrderDetails = () => {
             <Image source={{ uri: item.heroImage }} style={styles.heroImage} />
             <View style={styles.itemInfo}>
               <Text style={styles.itemName}>{item.title}</Text>
-              <Text style={styles.itemPrice}>Price: R{item.price}</Text>
+              <Text style={styles.itemPrice}>Price: ${item.price}</Text>
               {item.status?.trim().toLowerCase() === 'out of stock' && (
                 <Text style={[styles.itemstatus, { color: 'red' }]}>
                   Status: {item.status}
@@ -85,7 +85,7 @@ const OrderDetails = () => {
         <View style={styles.horizontalLine} />
         {order.status !== 'Received' && (
         <Text style={styles.refundText}>
-          Refund: R{order.refunded_amount ?? '0.00'}
+          Refund: ${order.refunded_amount ?? '0.00'}
         </Text>
         )}
       </View>
@@ -129,7 +129,13 @@ const styles: { [key: string]: any } = StyleSheet.create({
     backgroundColor: 'Orange',
   },
   statusBadge_Received: {
-    backgroundColor: 'green',
+    backgroundColor: '#FFC107', // Yellow
+  },
+  statusBadge_Ready: {
+    backgroundColor: '#28A745', // Green
+  },
+  statusBadge_Declined: {
+    backgroundColor: '#DC3545', // Red
   },
 
   statusText: {

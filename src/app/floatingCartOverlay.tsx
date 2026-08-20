@@ -59,7 +59,7 @@ const FloatingCartOverlay = () => {
           onPress={() => router.push('/cart')}
         >
           <Text style={styles.text}>
-            🛒 {totalCount} | R{parseFloat(totalPrice).toFixed(2)}
+            🛒 {totalCount} | ${parseFloat(totalPrice).toFixed(2)}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

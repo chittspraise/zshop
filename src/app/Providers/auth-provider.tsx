@@ -34,34 +34,68 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [mounting, setMounting] = useState(true);
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    const handleUserAndProfile = async (session: Session | null) => {
+      try {
+        setSession(session);
 
-      setSession(session);
+        if (session) {
+          // 1. Fetch users row
+          const { data: userRecord, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
 
-      if (session) {
-        const { data: user, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+          if (userError) {
+            console.error('Error fetching user record:', userError);
+          } else if (userRecord) {
+            setUser(userRecord);
+          }
 
-        if (error) {
-          console.error('error', error);
+          // 2. Fetch and ensure profile row exists
+          const { data: profileRecord, error: profileError } = await supabase
+            .from('profile')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+
+          if (profileError) {
+            console.error('Error fetching profile record:', profileError);
+          } else if (!profileRecord) {
+            console.log('No profile found. Creating default authenticated profile row...');
+            // Since they are signed in and authenticated, RLS will allow this insert!
+            const { error: insertError } = await supabase
+              .from('profile')
+              .insert({
+                user_id: session.user.id,
+                email: session.user.email,
+                first_name: session.user.user_metadata?.first_name || 'User',
+                last_name: session.user.user_metadata?.last_name || '',
+                phone_number: session.user.user_metadata?.phone_number || '',
+                wallet_balance: 100.00, // Starter balance
+              });
+
+            if (insertError) {
+              console.error('Error creating default profile:', insertError);
+            }
+          }
         } else {
-          setUser(user);
+          setUser(null);
         }
+      } catch (err) {
+        console.error('Unexpected error in handleUserAndProfile:', err);
+      } finally {
+        setMounting(false); // ⚡ Always guarantee mounting is set to false!
       }
-
-      setMounting(false);
     };
 
-    fetchSession();
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      await handleUserAndProfile(session);
     });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
