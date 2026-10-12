@@ -1,13 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import Stripe from 'npm:stripe@^17.5.0';
 
-export const stripe = Stripe(Deno.env.get('STRIPE_SECRET_KEY'), {
-  // This is needed to use the Fetch API rather than relying on the Node http
-  // package.
-  httpClient: Stripe.createFetchHttpClient(),
-});
-
-export const getOrCreateStripeCustomerForSupabaseUser = async (
+export const getOrCreatePaystackCustomerForSupabaseUser = async (
   req: Request
 ) => {
   const authHeader = req.headers.get('Authorization')!;
@@ -33,21 +26,45 @@ export const getOrCreateStripeCustomerForSupabaseUser = async (
 
   if (error) throw new Error(`Error fetching user: ${error.message}`);
 
-  if (data.stripe_customer_id) {
-    return data.stripe_customer_id;
+  if (data.paystack_customer_id) {
+    return data.paystack_customer_id;
   }
 
-  const customer = await stripe.customers.create({
-    email: user.email,
-    metadata: {
-      supabase_user_id: user.id,
-    },
-  });
+  const paystackSecretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
+  if (paystackSecretKey) {
+    try {
+      const res = await fetch('https://api.paystack.co/customer', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${paystackSecretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          metadata: {
+            supabase_user_id: user.id,
+          },
+        }),
+      });
+      const result = await res.json();
+      if (result.status && result.data?.customer_code) {
+        await supabaseClient
+          .from('users')
+          .update({ paystack_customer_id: result.data.customer_code })
+          .eq('id', user.id);
+        return result.data.customer_code;
+      }
+    } catch (e) {
+      console.warn('Could not register customer directly on Paystack:', e);
+    }
+  }
 
-  await supabaseClient
-    .from('users')
-    .update({ stripe_customer_id: customer.id })
-    .eq('id', user.id);
+  return user.email;
+};
 
-  return customer.id;
+// Legacy Stripe helper for backward compatibility
+export const getOrCreateStripeCustomerForSupabaseUser = async (
+  req: Request
+) => {
+  return await getOrCreatePaystackCustomerForSupabaseUser(req);
 };

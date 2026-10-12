@@ -1,54 +1,54 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
+// Note: Payment gateway migrated to Paystack.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import Stripe from 'npm:stripe@^17.5.0';
-import { getOrCreateStripeCustomerForSupabaseUser } from '../supabase.ts';
 
-export const stripe = Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
-  // This is needed to use the Fetch API rather than relying on the Node http
-  // package.
-  httpClient: Stripe.createFetchHttpClient(),
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const paystackSecretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
+    const body = await req.json();
+    const { totalAmount, amount, email = 'customer@eshop.com', callback_url } = body;
+    const finalAmount = totalAmount ?? amount;
+
+    if (paystackSecretKey && finalAmount) {
+      const initRes = await fetch('https://api.paystack.co/transaction/initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${paystackSecretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          amount: finalAmount,
+          callback_url,
+        }),
+      });
+      const initData = await initRes.json();
+      return new Response(JSON.stringify(initData.data || initData), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        message: 'Payment gateway has been migrated to Paystack. Please use paystack-checkout.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (err: any) {
+    return new Response(
+      JSON.stringify({ error: err.message || 'Internal server error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 });
-
-Deno.serve(async req => {
-  const { totalAmount } = await req.json();
-
-  const customer = await getOrCreateStripeCustomerForSupabaseUser(req);
-
-  const ephemeralKey = await stripe.ephemeralKeys.create(
-    { customer },
-    { apiVersion: '2020-08-27' }
-  );
-
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: totalAmount,
-    currency: 'usd',
-    customer, // This wil link the payment to the customer
-  });
-
-  const response = {
-    paymentIntent: paymentIntent.client_secret,
-    publicKey: Deno.env.get('STRIPE_PUBLISHABLE_KEY'),
-    ephemeralKey: ephemeralKey.secret,
-    customer,
-  };
-
-  return new Response(JSON.stringify(response), {
-    headers: { 'Content-Type': 'application/json' },
-  });
-});
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/stripe-checkout' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"totalAmount":"4000"}'
-
-*/

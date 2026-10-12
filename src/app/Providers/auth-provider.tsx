@@ -29,6 +29,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     expo_notification_token: string | null;
     id: string;
     stripe_customer_id: string | null;
+    paystack_customer_id?: string | null;
     type: string | null;
   } | null>(null);
   const [mounting, setMounting] = useState(true);

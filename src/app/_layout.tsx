@@ -2,7 +2,7 @@ import { Stack, useRouter, usePathname } from 'expo-router';
 import { ToastProvider } from 'react-native-toast-notifications';
 import AuthProvider from './Providers/auth-provider';
 import QueryProvider from './Providers/query-provider';
-import StripeProvider from './Providers/StripeProvider';
+import PaystackProvider from './Providers/PaystackProvider';
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Platform, StyleSheet, Image } from 'react-native';
@@ -111,7 +111,7 @@ export default function RootLayout() {
         <AuthProvider>
           <WalletProvider>
             <QueryProvider>
-              <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}>
+              <PaystackProvider publicKey={process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY}>
                 <NotificationProvider>
                   <View style={{ flex: 1 }}>
                     <Stack
@@ -137,7 +137,7 @@ export default function RootLayout() {
                     <FloatingCartOverlay />
                   </View>
                 </NotificationProvider>
-              </StripeProvider>
+              </PaystackProvider>
             </QueryProvider>
           </WalletProvider>
         </AuthProvider>

@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useCartStore } from './cart-store';
 import { createOrder, createOrderItem } from './api/api';
-import { openStripeCheckout, setupStripePaymentSheet } from './lib/stripe';
+import { openPaystackCheckout } from './lib/paystack';
 import { useWallet } from './Providers/Wallet-provider';
 import { useNavigation, useRouter } from 'expo-router';
 import { supabase } from './lib/supabase';
@@ -206,20 +206,24 @@ export default function Cart() {
     try {
       if (walletToggle) {
         if ((walletBalance ?? 0) >= totalPrice) {
-          // Covered entirely by wallet, no Stripe needed
+          // Covered entirely by wallet, no Paystack needed
           await updateWalletBalance((walletBalance ?? 0) - totalPrice);
         } else {
-          // Covered partially by wallet, remaining covered by Stripe
+          // Covered partially by wallet, remaining covered by Paystack
           const remainingAmount = totalPrice - (walletBalance ?? 0);
-          await setupStripePaymentSheet(Math.round(remainingAmount * 100));
-          const success = await openStripeCheckout();
+          const success = await openPaystackCheckout({
+            totalAmount: Math.round(remainingAmount * 100),
+            email: user.email,
+          });
           if (!success) return;
           await updateWalletBalance(0);
         }
       } else {
-        // Covered entirely by Stripe card
-        await setupStripePaymentSheet(Math.round(totalPrice * 100));
-        const success = await openStripeCheckout();
+        // Covered entirely by Paystack
+        const success = await openPaystackCheckout({
+          totalAmount: Math.round(totalPrice * 100),
+          email: user.email,
+        });
         if (!success) return;
       }
       

@@ -23,6 +23,9 @@ const renderItem: ListRenderItem<Tables<'order'>> = ({ item }) => (
         <View style={styles.orderDetailsContainer}>
           <Text style={styles.orderItem}>{item.slug}</Text>
           <Text style={styles.orderDetails}>{item.description}</Text>
+          {item.shop_name ? (
+            <Text style={styles.orderShop}>📍 Pickup: {item.shop_name}</Text>
+          ) : null}
           <Text style={styles.orderDate}>
             {format(new Date(item.created_at), 'MMM dd, yyyy')}
           </Text>
@@ -98,6 +101,12 @@ const styles: { [key: string]: any } = StyleSheet.create({
   orderDetails: {
     fontSize: 14,
     color: '#555',
+  },
+  orderShop: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#15803d',
+    marginTop: 4,
   },
   orderDate: {
     fontSize: 12,

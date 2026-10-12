@@ -321,14 +321,63 @@ Deno.serve(async (req) => {
             }
           }
         }
-        // Handle Order Accept/Decline flow
-        else if (upperMessage.startsWith("ACCEPT") || upperMessage.startsWith("DECLINE")) {
-          const parts = message.split(/\s+/); 
-          const action = parts[0].toUpperCase();
-          const orderSlug = parts[1];
+        // Handle Order Accept/Decline flow (supports "1", "2", or "ACCEPT <slug>", "DECLINE <slug>")
+        else if (
+          upperMessage === "1" ||
+          upperMessage.startsWith("1 ") ||
+          upperMessage === "1." ||
+          upperMessage === "2" ||
+          upperMessage.startsWith("2 ") ||
+          upperMessage === "2." ||
+          upperMessage.startsWith("ACCEPT") ||
+          upperMessage.startsWith("DECLINE")
+        ) {
+          let action = "";
+          let orderSlug = "";
+
+          if (upperMessage === "1" || upperMessage.startsWith("1 ") || upperMessage === "1.") {
+            action = "ACCEPT";
+            const parts = message.split(/\s+/);
+            if (parts.length > 1) {
+              orderSlug = parts[1];
+            }
+          } else if (upperMessage === "2" || upperMessage.startsWith("2 ") || upperMessage === "2.") {
+            action = "DECLINE";
+            const parts = message.split(/\s+/);
+            if (parts.length > 1) {
+              orderSlug = parts[1];
+            }
+          } else if (upperMessage.startsWith("ACCEPT")) {
+            action = "ACCEPT";
+            const parts = message.split(/\s+/);
+            orderSlug = parts[1] || "";
+          } else if (upperMessage.startsWith("DECLINE")) {
+            action = "DECLINE";
+            const parts = message.split(/\s+/);
+            orderSlug = parts[1] || "";
+          }
+
+          // If no order slug was specified (e.g. shop simply texted "1" or "2"),
+          // automatically retrieve the latest pending order dispatched to this shop!
+          if (!orderSlug) {
+            const { data: pendingRecord, error: pendingErr } = await supabaseAdmin
+              .from("shop_pending_orders")
+              .select("*")
+              .eq("shop_phone", sender)
+              .eq("status", "pending")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (pendingErr) {
+              console.error(`[whatsapp-reply-handler] Error querying pending order for ${sender}:`, pendingErr);
+            } else if (pendingRecord) {
+              orderSlug = pendingRecord.order_slug;
+            }
+          }
 
           if (!orderSlug) {
-            reply = "Please include the Order ID (e.g., ACCEPT order-123)";
+            reply = "You don't have any pending orders waiting for a reply right now. (Or specify the ID like: 1 order-123)";
           } else {
             // 1. Fetch the current state of the order
             const { data: order, error: fetchError } = await supabaseAdmin
@@ -341,23 +390,79 @@ Deno.serve(async (req) => {
               console.error(`[whatsapp-reply-handler] Order fetch failed for slug ${orderSlug}:`, fetchError);
               reply = `Order ${orderSlug} not found.`;
             } else if (order.status !== 'Received') {
-              reply = `Sorry, order ${orderSlug} is already ${order.status}.`;
+              // Mark this shop's pending record as 'missed'
+              await supabaseAdmin
+                .from("shop_pending_orders")
+                .update({ status: 'missed' })
+                .eq("shop_phone", sender)
+                .eq("order_slug", orderSlug);
+
+              reply = `Sorry, order ${orderSlug} was already taken or closed (${order.status}). Thank you!`;
             } else {
               // 2. Handle Logic
               if (action === "ACCEPT") {
+                // Fetch the accepting shop's details using their phone number
+                const { data: acceptingShop, error: shopFetchErr } = await supabaseAdmin
+                  .from("shops")
+                  .select("*")
+                  .eq("phone_number", sender)
+                  .maybeSingle();
+
+                if (shopFetchErr) {
+                  console.error(`[whatsapp-reply-handler] Error fetching shop profile for ${sender}:`, shopFetchErr);
+                }
+
+                const shopName = acceptingShop?.shop_name || "Partner Shop";
+                const shopAddress = acceptingShop?.address || "";
+                const shopPhone = acceptingShop?.phone_number || sender;
+                const shopOwner = acceptingShop
+                  ? `${acceptingShop.name || ""} ${acceptingShop.surname || ""}`.trim()
+                  : "";
+                const shopLat = acceptingShop?.latitude ?? null;
+                const shopLon = acceptingShop?.longitude ?? null;
+
                 const { error: updateError } = await supabaseAdmin
                   .from("order")
-                  .update({ status: 'Ready' })
+                  .update({
+                    status: "Ready",
+                    shop_name: shopName,
+                    shop_address: shopAddress,
+                    shop_phone: shopPhone,
+                    shop_owner_name: shopOwner,
+                    shop_latitude: shopLat,
+                    shop_longitude: shopLon,
+                  })
                   .eq("slug", orderSlug);
 
                 if (updateError) {
                   console.error(`[whatsapp-reply-handler] Failed to accept order ${orderSlug}:`, updateError);
                   reply = `❌ Sorry, failed to accept order in database. Please try again.`;
                 } else {
-                  reply = `✅ Success! Order ${orderSlug} is yours. Please prepare it for the customer.`;
+                  // Mark this shop's pending record as 'accepted'
+                  await supabaseAdmin
+                    .from("shop_pending_orders")
+                    .update({ status: 'accepted' })
+                    .eq("shop_phone", sender)
+                    .eq("order_slug", orderSlug);
+
+                  // Mark other shops' pending records for this order as 'missed'
+                  await supabaseAdmin
+                    .from("shop_pending_orders")
+                    .update({ status: 'missed' })
+                    .eq("order_slug", orderSlug)
+                    .neq("shop_phone", sender);
+
+                  reply = `✅ Success! Order ${orderSlug} is yours. Please prepare it for the customer.\n\n📍 Collection point: *${shopName}*${shopAddress ? ` (${shopAddress})` : ""}`;
                 }
               } else {
                 // It's a DECLINE
+                // Mark this shop's pending record as 'declined'
+                await supabaseAdmin
+                  .from("shop_pending_orders")
+                  .update({ status: 'declined' })
+                  .eq("shop_phone", sender)
+                  .eq("order_slug", orderSlug);
+
                 const newDeclineCount = (order.declined_shops_count || 0) + 1;
                 const totalNotified = order.notified_shops_count || 1;
 
@@ -450,7 +555,7 @@ Deno.serve(async (req) => {
           }
         } 
         else {
-          reply = "Send REGISTER to start or reply ACCEPT [OrderID]/DECLINE [OrderID].";
+          reply = "Send REGISTER to start or reply 1 to Accept / 2 to Decline.";
         }
 
         // Send reply if any was set

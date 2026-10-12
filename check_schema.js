@@ -1,3 +1,5 @@
+
+
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://glgofbepunfskmhmuyld.supabase.co'; // wait, let's check what is in src/app/lib/supabase.ts

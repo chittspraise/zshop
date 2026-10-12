@@ -51,10 +51,19 @@ Deno.serve(async (req) => {
       
       const productList = newOrder.description || "Order items (check app)";
       const groceryNotesPart = newOrder.grocery_notes ? `\n📝 *Grocery List Note:* ${newOrder.grocery_notes}` : '';
-      const messageBody = `📦 *New Order Available!*\n\n*Order ID:* ${newOrder.slug}\n*Total:* $${newOrder.totalPrice}\n*Address:* ${newOrder.delivery_address || 'N/A'}${groceryNotesPart}\n\n*Items:*\n${productList}\n\n--- \n✅ Reply *ACCEPT ${newOrder.slug}* to take this order\n❌ Reply *DECLINE ${newOrder.slug}* if you are busy`;
+      const messageBody = `📦 *New Order Available!*\n\n*Order ID:* ${newOrder.slug}\n*Total:* $${newOrder.totalPrice}\n*Address:* ${newOrder.delivery_address || 'N/A'}${groceryNotesPart}\n\n*Items:*\n${productList}\n\n---\n*Reply with:*\n*1* - ✅ Accept Order\n*2* - ❌ Decline Order`;
 
       for (const shop of nearbyShops) {
         if (shop.phone_number) {
+          // Record pending order dispatch for quick 1/2 replies
+          await supabaseAdmin
+            .from('shop_pending_orders')
+            .insert({
+              shop_phone: shop.phone_number,
+              order_slug: newOrder.slug,
+              status: 'pending'
+            });
+
           const cleanPhone = shop.phone_number.replace('whatsapp:', '').replace('+', '').trim();
           
           const response = await fetch(`https://graph.facebook.com/v18.0/${META_PHONE_NUMBER_ID}/messages`, {
