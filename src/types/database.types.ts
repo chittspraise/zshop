@@ -369,6 +369,78 @@ export type Database = {
         }
         Relationships: []
       }
+      user_cards: {
+        Row: {
+          id: string
+          user_id: string
+          authorization_code: string
+          card_type: string | null
+          last4: string
+          exp_month: string | null
+          exp_year: string | null
+          bank: string | null
+          channel: string | null
+          reusable: boolean | null
+          country_code: string | null
+          account_name: string | null
+          is_default: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          authorization_code: string
+          card_type?: string | null
+          last4: string
+          exp_month?: string | null
+          exp_year?: string | null
+          bank?: string | null
+          channel?: string | null
+          reusable?: boolean | null
+          country_code?: string | null
+          account_name?: string | null
+          is_default?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          authorization_code?: string
+          card_type?: string | null
+          last4?: string
+          exp_month?: string | null
+          exp_year?: string | null
+          bank?: string | null
+          channel?: string | null
+          reusable?: boolean | null
+          country_code?: string | null
+          account_name?: string | null
+          is_default?: boolean | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      exchange_rates: {
+        Row: {
+          currency: string
+          rate: number
+          base_currency: string
+          updated_at: string
+        }
+        Insert: {
+          currency: string
+          rate: number
+          base_currency?: string
+          updated_at?: string
+        }
+        Update: {
+          currency?: string
+          rate?: number
+          base_currency?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

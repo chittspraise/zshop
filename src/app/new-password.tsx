@@ -15,6 +15,14 @@ export default function NewPassword() {
 
   useEffect(() => {
     (async () => {
+      // 1. Check if session was already set by RootLayout deep link handler
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setLoading(false);
+        return;
+      }
+
+      // 2. Fallback to parse initial URL if opened directly
       let url = await Linking.getInitialURL();
       if (url?.includes('#')) url = url.replace('#', '?');
       if (!url) {
@@ -28,8 +36,6 @@ export default function NewPassword() {
       if (at && rt) {
         const { error: sessErr } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
         if (sessErr) Toast.show(sessErr.message, { type: 'danger', placement: 'top' });
-      } else {
-        Toast.show('Missing tokens in link', { type: 'danger', placement: 'top' });
       }
       setLoading(false);
     })();

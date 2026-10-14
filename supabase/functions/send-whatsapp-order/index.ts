@@ -1,6 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
+// deno-lint-ignore no-explicit-any
+declare const Deno: any;
+
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -13,7 +16,7 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   return R * c;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   try {
     const payload = await req.json();
 
@@ -25,6 +28,20 @@ Deno.serve(async (req) => {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
+      // Idempotency check: prevent duplicate notifications if order was already dispatched
+      if (newOrder.slug) {
+        const { data: alreadyDispatched } = await supabaseAdmin
+          .from('shop_pending_orders')
+          .select('id')
+          .eq('order_slug', newOrder.slug)
+          .limit(1);
+
+        if (alreadyDispatched && alreadyDispatched.length > 0) {
+          console.log(`Order ${newOrder.slug} is already dispatched. Skipping duplicate notification.`);
+          return new Response("Already dispatched", { status: 200 });
+        }
+      }
+
       const { data: shops, error: shopsError } = await supabaseAdmin
         .from('shops')
         .select('*')
@@ -32,10 +49,10 @@ Deno.serve(async (req) => {
 
       if (shopsError || !shops) return new Response("Error", { status: 500 });
 
-      // Notify all active registered shops (removing the 50km distance restriction)
+      // Notify all active registered shops
       const nearbyShops = shops;
 
-      // --- LOGIC CHANGE: Save how many shops we are asking ---
+      // Save how many shops we are asking
       await supabaseAdmin
         .from('order')
         .update({ notified_shops_count: nearbyShops.length })
@@ -98,4 +115,4 @@ Deno.serve(async (req) => {
     console.error(err);
     return new Response("Error", { status: 500 });
   }
-})
+});

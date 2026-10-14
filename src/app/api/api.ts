@@ -144,6 +144,8 @@ export const createOrder = () => {
       latitude?: number;
       longitude?: number;
       grocery_notes?: string;
+      payment_reference?: string;
+      payment_gateway?: string;
     }) {
       if (!id) throw new Error("User not authenticated");
       const { data, error } = await supabase
@@ -155,6 +157,8 @@ export const createOrder = () => {
           latitude: orderData.latitude,
           longitude: orderData.longitude,
           grocery_notes: orderData.grocery_notes,
+          payment_reference: orderData.payment_reference,
+          payment_gateway: orderData.payment_gateway || 'paystack',
           slug,
           user: id,
           status: 'Received',
@@ -268,3 +272,5 @@ export const useUpsertMyProfile = () => {
     },
   });
 };
+
+export const upsertMyProfile = useUpsertMyProfile;

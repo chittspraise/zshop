@@ -41,7 +41,13 @@ export default function RootLayout() {
         didRestore = true;
       }
 
-      if (path === 'new-password') {
+      const isRecovery =
+        path === 'new-password' ||
+        path === '/new-password' ||
+        link.includes('new-password') ||
+        queryParams?.type === 'recovery';
+
+      if (isRecovery) {
         router.push({
           pathname: '/new-password',
           params: queryParams && Object.keys(queryParams).length ? queryParams : undefined,
@@ -104,6 +110,8 @@ export default function RootLayout() {
     );
   }
 
+  const paystackPublicKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || 'pk_test_88b005c4f442f433daa074d461171c4bf638d7f4';
+
   return (
     <View style={styles.container}>
       <StatusBar style="auto" translucent backgroundColor="transparent" />
@@ -111,7 +119,7 @@ export default function RootLayout() {
         <AuthProvider>
           <WalletProvider>
             <QueryProvider>
-              <PaystackProvider publicKey={process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY}>
+              <PaystackProvider publicKey={paystackPublicKey}>
                 <NotificationProvider>
                   <View style={{ flex: 1 }}>
                     <Stack

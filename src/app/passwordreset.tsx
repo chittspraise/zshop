@@ -31,8 +31,13 @@ export default function PasswordReset() {
     setLoading(true);
 
     try {
+      const redirectUrl =
+        Platform.OS === 'web' && typeof window !== 'undefined'
+          ? `${window.location.origin}/new-password`
+          : 'eshop://new-password';
+
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'eshop://new-password', // Your app's deep link
+        redirectTo: redirectUrl,
       });
 
       if (error) {
