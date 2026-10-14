@@ -405,7 +405,7 @@ export default function Cart() {
             style={styles.recipientCard}
           >
             <View style={styles.recipientCardHeader}>
-              <Text style={styles.recipientCardTitle}>Deliver to Recipient</Text>
+              <Text style={styles.recipientCardTitle}>Recipient Address</Text>
               <Text style={styles.recipientCardChange}>Change</Text>
             </View>
             <Text style={styles.recipientCardAddress} numberOfLines={2}>
@@ -418,7 +418,7 @@ export default function Cart() {
             style={styles.recipientCardEmpty}
           >
             <Text style={styles.recipientCardEmptyText}>
-              ⚠️ Set Recipient Delivery Address
+              ⚠️ Set Recipient Address
             </Text>
           </TouchableOpacity>
         )}
