@@ -210,6 +210,10 @@ export default function AccountScreen() {
             <Option icon="gavel" label="Terms of Service" iconColor="#64748b" />
           </TouchableOpacity>
 
+          <TouchableOpacity onPress={() => Linking.openURL("https://eshopadmin-zeta.vercel.app/RefundPolicy")}>
+            <Option icon="assignment-return" label="Refund & Delivery Policy" iconColor="#10b981" />
+          </TouchableOpacity>
+
           <TouchableOpacity onPress={() => Linking.openURL('https://eshopadmin-zeta.vercel.app/TermsAndCondition')} style={{ borderBottomWidth: 0 }}>
             <Option icon="help" label="FAQ" iconColor="#64748b" isLast />
           </TouchableOpacity>

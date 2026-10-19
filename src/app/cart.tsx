@@ -294,11 +294,32 @@ export default function Cart() {
             });
 
             if (!chargeResult.success) {
-              toast.show(`Payment failed: ${chargeResult.error || 'Card declined'}`, {
-                type: 'danger',
-                placement: 'top',
-              });
-              setIsProcessing(false);
+              Alert.alert(
+                'Saved Card Payment Declined',
+                `${chargeResult.error || 'The saved card could not be charged'}. Would you like to use another card?`,
+                [
+                  { text: 'Cancel', style: 'cancel', onPress: () => setIsProcessing(false) },
+                  {
+                    text: 'Pay with Card',
+                    onPress: async () => {
+                      setSelectedCardId('new');
+                      const success = await openPaystackCheckout({
+                        amountUSD: remainingUSD,
+                        currency: selectedCurrency,
+                        email: user.email,
+                        userId: user.id,
+                        saveCard: saveCardToggle,
+                      });
+                      if (success) {
+                        await updateWalletBalance(0);
+                        await submitOrder();
+                      } else {
+                        setIsProcessing(false);
+                      }
+                    },
+                  },
+                ]
+              );
               return;
             }
 
@@ -338,11 +359,31 @@ export default function Cart() {
           });
 
           if (!chargeResult.success) {
-            toast.show(`Payment failed: ${chargeResult.error || 'Card declined'}`, {
-              type: 'danger',
-              placement: 'top',
-            });
-            setIsProcessing(false);
+            Alert.alert(
+              'Saved Card Payment Declined',
+              `${chargeResult.error || 'The saved card could not be charged'}. Would you like to use another card?`,
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => setIsProcessing(false) },
+                {
+                  text: 'Pay with Card',
+                  onPress: async () => {
+                    setSelectedCardId('new');
+                    const success = await openPaystackCheckout({
+                      amountUSD: totalPriceUSD,
+                      currency: selectedCurrency,
+                      email: user.email,
+                      userId: user.id,
+                      saveCard: saveCardToggle,
+                    });
+                    if (success) {
+                      await submitOrder();
+                    } else {
+                      setIsProcessing(false);
+                    }
+                  },
+                },
+              ]
+            );
             return;
           }
 

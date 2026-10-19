@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import PaystackCheckoutModalWeb from '../components/PaystackCheckoutModal.web';
 import {
@@ -78,6 +79,8 @@ export default function PaystackProvider({
         let email = optionalEmail;
         let currency = selectedCurrency;
         let metadata: Record<string, any> | undefined;
+        let targetUserId: string | undefined;
+        let saveCard: boolean = true;
 
         if (typeof amountOrOptions === 'number') {
           inputAmountUSD = amountOrOptions;
@@ -92,11 +95,16 @@ export default function PaystackProvider({
           email = amountOrOptions.email ?? email;
           currency = amountOrOptions.currency ?? currency;
           metadata = amountOrOptions.metadata;
+          targetUserId = amountOrOptions.userId;
+          if (amountOrOptions.saveCard !== undefined) {
+            saveCard = amountOrOptions.saveCard;
+          }
         }
 
-        if (!email) {
+        if (!email || !targetUserId) {
           const { data: { user } } = await supabase.auth.getUser();
-          email = user?.email;
+          email = email || user?.email;
+          targetUserId = targetUserId || user?.id;
         }
 
         if (!email) {
@@ -112,13 +120,26 @@ export default function PaystackProvider({
             totalAmount: directSubunits,
             email,
             currency,
+            user_id: targetUserId,
+            save_card: saveCard,
             metadata,
             callback_url: 'https://standard.paystack.co/close',
           },
         });
 
         if (error || !data?.authorization_url || !data?.reference) {
-          console.error('Failed to initialize Paystack transaction:', error || data?.error);
+          let errMsg = data?.error;
+          if (!errMsg && error) {
+            try {
+              if ((error as any).context && typeof (error as any).context.json === 'function') {
+                const bodyJson = await (error as any).context.json();
+                errMsg = bodyJson?.error || bodyJson?.message;
+              }
+            } catch {}
+          }
+          errMsg = errMsg || error?.message || 'Failed to initialize Paystack transaction';
+          console.error('Failed to initialize Paystack transaction:', errMsg);
+          Alert.alert('Payment Initialization Failed', errMsg);
           resolve(false);
           return;
         }
@@ -130,8 +151,9 @@ export default function PaystackProvider({
         setActiveCurrency(data.currency || currency);
         setAmountUSD(data.amountUSD);
         setModalVisible(true);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error starting Paystack web in-app checkout:', err);
+        Alert.alert('Payment Error', err?.message || 'An unexpected error occurred starting checkout');
         resolve(false);
       }
     });

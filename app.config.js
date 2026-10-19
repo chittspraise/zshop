@@ -63,7 +63,7 @@ export default {
     ],
     extra: {
       googleApiKey: process.env.GOOGLE_API_KEY,
-      paystackPublicKey: process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_88b005c4f442f433daa074d461171c4bf638d7f4",
+      paystackPublicKey: process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_af5d8ec38cd9d4e4d828da8fa30e5b33b9d5b0b1",
       router: {
         origin: false
       },

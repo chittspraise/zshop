@@ -109,11 +109,18 @@ export const chargeSavedCard = async ({
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      let errMsg = error.message;
+      if ((error as any).context && typeof (error as any).context.json === 'function') {
+        try {
+          const bodyJson = await (error as any).context.json();
+          errMsg = bodyJson?.error || bodyJson?.message || errMsg;
+        } catch {}
+      }
+      return { success: false, error: errMsg };
     }
 
     if (!data?.success && !data?.status) {
-      return { success: false, error: data?.error || 'Charge authorization failed' };
+      return { success: false, error: data?.error || data?.message || 'Charge authorization failed' };
     }
 
     if (data?.reference) {

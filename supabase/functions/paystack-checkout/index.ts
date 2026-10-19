@@ -279,6 +279,206 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Action 3.4: Diagnose Meta WhatsApp Cloud API credentials & delivery
+    if (action === 'diagnose_meta') {
+      const META_PHONE_NUMBER_ID = Deno.env.get('META_PHONE_NUMBER_ID');
+      const META_ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN');
+      const targetPhone = body.target_phone || '27658932664';
+
+      let metaPhoneDetails = null;
+      let metaPhoneError = null;
+
+      if (META_PHONE_NUMBER_ID && META_ACCESS_TOKEN) {
+        try {
+          const phoneRes = await fetch(`https://graph.facebook.com/v18.0/${META_PHONE_NUMBER_ID}?fields=display_phone_number,verified_name,code_verification_status,quality_rating`, {
+            headers: { 'Authorization': `Bearer ${META_ACCESS_TOKEN}` }
+          });
+          metaPhoneDetails = await phoneRes.json();
+        } catch (e) {
+          metaPhoneError = String(e);
+        }
+      }
+
+      let sendTestResult = null;
+      if (META_PHONE_NUMBER_ID && META_ACCESS_TOKEN && targetPhone) {
+        const cleanPhone = String(targetPhone).replace('whatsapp:', '').replace('+', '').trim();
+        const useTemplate = body.use_template === true;
+        const msgPayload = useTemplate ? {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanPhone,
+          type: "template",
+          template: {
+            name: "hello_world",
+            language: { code: "en_US" }
+          }
+        } : {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanPhone,
+          type: "text",
+          text: {
+            preview_url: false,
+            body: "🧪 *eShop WhatsApp Diagnostic*\n\nIf you see this message, Meta WhatsApp Cloud API is properly connected to your number! Reply *REGISTER* to start shop registration."
+          }
+        };
+
+        try {
+          const sendRes = await fetch(`https://graph.facebook.com/v18.0/${META_PHONE_NUMBER_ID}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(msgPayload)
+          });
+          const sendBody = await sendRes.json();
+          sendTestResult = {
+            mode: useTemplate ? 'template (hello_world)' : 'text (session)',
+            status_code: sendRes.status,
+            ok: sendRes.ok,
+            response: sendBody
+          };
+        } catch (e) {
+          sendTestResult = { error: String(e) };
+        }
+      }
+
+      return new Response(JSON.stringify({
+        has_phone_number_id: !!META_PHONE_NUMBER_ID,
+        phone_number_id: META_PHONE_NUMBER_ID ? `${META_PHONE_NUMBER_ID.slice(0, 4)}...${META_PHONE_NUMBER_ID.slice(-4)}` : null,
+        has_access_token: !!META_ACCESS_TOKEN,
+        meta_phone_details: metaPhoneDetails,
+        meta_phone_error: metaPhoneError,
+        send_test_result: sendTestResult
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Action 3.5: Test Paystack Order Creation & Shop Dispatch
+    if (action === 'test_paystack_order') {
+      const emailToUse = email || 'test_buyer@eshop.com';
+      const usdAmount = typeof amountUSD === 'number' && amountUSD > 0 ? amountUSD : 15.0;
+      const rates = await getRealtimeExchangeRates(supabase);
+      const merchantCurrency = Deno.env.get('PAYSTACK_CURRENCY') || 'ZAR';
+      const merchantRate = Number(rates[merchantCurrency]) || 16.46;
+      const amountSubunits = Math.round(usdAmount * merchantRate * 100);
+
+      const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${paystackSecretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: emailToUse,
+          amount: amountSubunits,
+          currency: merchantCurrency,
+          callback_url: 'https://standard.paystack.co/close',
+        }),
+      });
+
+      const paystackData = await paystackRes.json();
+      if (!paystackData.status) {
+        return new Response(JSON.stringify({ error: paystackData.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const ref = paystackData.data.reference;
+
+      // Find or create a user ID
+      let orderUserId = user_id;
+      if (!orderUserId) {
+        const { data: userList } = await supabase.from('users').select('id').limit(1);
+        if (userList && userList.length > 0) {
+          orderUserId = userList[0].id;
+        } else {
+          const { data: authList } = await supabase.auth.admin.listUsers();
+          if (authList?.users && authList.users.length > 0) {
+            orderUserId = authList.users[0].id;
+            await supabase.from('users').upsert({
+              id: orderUserId,
+              email: authList.users[0].email || 'test@eshop.com',
+              avatar_url: '',
+              type: 'USER',
+            });
+          } else {
+            const { data: newUser } = await supabase.auth.admin.createUser({
+              email: 'customer_test_paystack@eshop.com',
+              password: 'Password123!',
+              email_confirm: true,
+            });
+            if (newUser?.user) {
+              orderUserId = newUser.user.id;
+              await supabase.from('users').upsert({
+                id: orderUserId,
+                email: 'customer_test_paystack@eshop.com',
+                avatar_url: '',
+                type: 'USER',
+              });
+            }
+          }
+        }
+      }
+
+      const orderSlug = 'order-paystack-' + Math.random().toString(36).substr(2, 8);
+      const newOrderPayload = {
+        totalPrice: usdAmount,
+        description: '2x Fresh Apples ($6.00)\n1x Brown Bread ($4.50)\n1x Cooking Oil ($4.50)',
+        delivery_address: '11037 Glen View 7, Harare, Zimbabwe',
+        latitude: -17.852345,
+        longitude: 31.043567,
+        grocery_notes: 'Paystack checkout test for registered shops',
+        slug: orderSlug,
+        user: orderUserId,
+        status: 'Received',
+        payment_gateway: 'paystack',
+        payment_reference: ref,
+        refunded_amount: 0,
+      };
+
+      const { data: insertedOrder, error: orderErr } = await supabase
+        .from('order')
+        .insert(newOrderPayload)
+        .select('*')
+        .single();
+
+      if (orderErr) {
+        return new Response(JSON.stringify({ error: orderErr.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Wait for the on_order_created DB trigger and send-whatsapp-order Edge Function to complete dispatch
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+
+      const { data: pendingDispatches } = await supabase
+        .from('shop_pending_orders')
+        .select('*')
+        .eq('order_slug', orderSlug);
+
+      const { data: refreshedOrder } = await supabase
+        .from('order')
+        .select('id, slug, status, notified_shops_count, shop_name, shop_phone')
+        .eq('id', insertedOrder.id)
+        .single();
+
+      return new Response(JSON.stringify({
+        status: true,
+        paystack_reference: ref,
+        paystack_access_code: paystackData.data.access_code,
+        authorization_url: paystackData.data.authorization_url,
+        order: refreshedOrder || insertedOrder,
+        shop_pending_dispatches: pendingDispatches || [],
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Action 4: Standard In-App Initialize
     const inputUSD = typeof amountUSD === 'number'
       ? amountUSD

@@ -175,6 +175,16 @@ Deno.serve(async (req) => {
 
         let reply = "";
 
+        const isRegisterTrigger =
+          upperMessage === "REGISTER" ||
+          upperMessage === "REGISSTER" ||
+          upperMessage === "REG" ||
+          upperMessage === "START" ||
+          upperMessage === "RESTART" ||
+          upperMessage === "RESET";
+
+        const isCancel = upperMessage === "CANCEL" || upperMessage === "STOP";
+
         // Check if there is an active registration session for this sender
         const { data: sessionData, error: sessionFetchError } = await supabaseAdmin
           .from("registration_sessions")
@@ -185,7 +195,53 @@ Deno.serve(async (req) => {
         if (sessionFetchError) {
           console.error(`[whatsapp-reply-handler] Error fetching registration session for ${sender}:`, sessionFetchError);
           reply = "❌ A database error occurred while fetching your session. Please try again later.";
-        } else if (sessionData) {
+        } 
+        // 1. Cancel active registration
+        else if (isCancel) {
+          await supabaseAdmin
+            .from("registration_sessions")
+            .delete()
+            .eq("phone_number", sender);
+          reply = "❌ Registration cancelled. Reply *REGISTER* anytime to register your shop.";
+        }
+        // 2. Start or Restart registration (even if a stuck session exists)
+        else if (isRegisterTrigger) {
+          // Check if the shop is already registered in 'shops' table
+          const { data: existingShop, error: shopFetchError } = await supabaseAdmin
+            .from("shops")
+            .select("*")
+            .eq("phone_number", sender)
+            .maybeSingle();
+
+          if (shopFetchError) {
+            console.error(`[whatsapp-reply-handler] Error checking existing shop for ${sender}:`, shopFetchError);
+            reply = "❌ A database error occurred. Please try again later.";
+          } else if (existingShop) {
+            reply = `✨ Your shop, *${existingShop.shop_name}*, is already registered and active on eShop!`;
+          } else {
+            // Upsert / reset registration session to step 1
+            const { error: sessionUpsertError } = await supabaseAdmin
+              .from("registration_sessions")
+              .upsert({
+                phone_number: sender,
+                step: 1,
+                first_name: null,
+                surname: null,
+                shop_name: null,
+                address: null,
+                updated_at: new Date().toISOString()
+              });
+            
+            if (sessionUpsertError) {
+              console.error(`[whatsapp-reply-handler] Error inserting registration session for ${sender}:`, sessionUpsertError);
+              reply = "❌ Failed to start registration session. Please try again.";
+            } else {
+              reply = "👋 Welcome to eShop! Let's register your shop.\n\n*Step 1 of 5:* What is your first name?";
+            }
+          }
+        }
+        // 3. Continue in-progress registration session
+        else if (sessionData) {
           const currentStep = sessionData.step || 1;
 
           try {
@@ -200,7 +256,7 @@ Deno.serve(async (req) => {
                 console.error(`[whatsapp-reply-handler] Error updating session to step 2 for ${sender}:`, updateError);
                 reply = "❌ Failed to save your first name. Please try again.";
               } else {
-                reply = `📝 Thanks, ${message}! What is your surname?`;
+                reply = `📝 Thanks, ${message}!\n\n*Step 2 of 5:* What is your surname?`;
               }
             } 
             else if (currentStep === 2) {
@@ -214,7 +270,7 @@ Deno.serve(async (req) => {
                 console.error(`[whatsapp-reply-handler] Error updating session to step 3 for ${sender}:`, updateError);
                 reply = "❌ Failed to save your surname. Please try again.";
               } else {
-                reply = `🏢 Got it! What is the name of your shop?`;
+                reply = `🏢 Got it!\n\n*Step 3 of 5:* What is the name of your shop?`;
               }
             } 
             else if (currentStep === 3) {
@@ -228,7 +284,7 @@ Deno.serve(async (req) => {
                 console.error(`[whatsapp-reply-handler] Error updating session to step 4 for ${sender}:`, updateError);
                 reply = "❌ Failed to save your shop name. Please try again.";
               } else {
-                reply = `📍 Awesome! What is the physical address of your shop (Street, City)?`;
+                reply = `📍 Awesome!\n\n*Step 4 of 5:* What is the physical address of your shop (Street, City)?`;
               }
             } 
             else if (currentStep === 4) {
@@ -242,83 +298,62 @@ Deno.serve(async (req) => {
                 console.error(`[whatsapp-reply-handler] Error updating session to step 5 for ${sender}:`, updateError);
                 reply = "❌ Failed to save your address. Please try again.";
               } else {
-                reply = `📍 Great! Now, please share your exact shop location pin on WhatsApp so we can get your precise GPS coordinates.\n\n*(To do this, tap the attachment '+' or paperclip button, select 'Location', and tap 'Send Your Current Location')*`;
+                reply = `📍 Great!\n\n*Step 5 of 5:* Please share your shop's WhatsApp Location Pin so customers can find your shop.\n*(Tap '+' or paperclip ➔ Location ➔ Send Your Current Location)*\n\n💡 *Can't send a pin?* Just reply *SKIP* and we will automatically use your physical address (*${message}*)!`;
               }
             } 
             else if (currentStep === 5) {
-              // User shared location pin. Final Step!
+              let lat: number;
+              let lon: number;
+
               if (isLocation && messageObj.location) {
-                const lat = messageObj.location.latitude;
-                const lon = messageObj.location.longitude;
-
-                // Create the active shop record
-                const { error: shopInsertError } = await supabaseAdmin
-                  .from("shops")
-                  .insert({
-                    name: sessionData.first_name,
-                    surname: sessionData.surname,
-                    shop_name: sessionData.shop_name,
-                    address: sessionData.address,
-                    phone_number: sender,
-                    latitude: lat,
-                    longitude: lon,
-                    is_active: true
-                  });
-
-                if (shopInsertError) {
-                  console.error("[whatsapp-reply-handler] Shop registration insert failed:", shopInsertError);
-                  reply = "❌ Sorry, an error occurred while saving your shop details. Please reply REGISTER to try again.";
-                } else {
-                  // Clear registration session
-                  const { error: deleteError } = await supabaseAdmin
-                    .from("registration_sessions")
-                    .delete()
-                    .eq("phone_number", sender);
-
-                  if (deleteError) {
-                    console.error(`[whatsapp-reply-handler] Warning: Failed to delete registration session for ${sender}:`, deleteError);
-                  }
-
-                  reply = `🎉 Congratulations! *${sessionData.shop_name}* is now officially registered and active!\n\nYou will automatically receive WhatsApp notifications for any customer orders placed on eShop.`;
-                }
+                // User sent exact WhatsApp location pin
+                lat = messageObj.location.latitude;
+                lon = messageObj.location.longitude;
               } else {
-                reply = `📍 Please share your location pin on WhatsApp so we can get your precise GPS coordinates.\n\n*(To do this, tap the attachment '+' or paperclip button, select 'Location', and tap 'Send Your Current Location')*`;
+                // User sent text, "SKIP", or is unable to send pin -> Automatically geocode their physical address!
+                const addressToGeocode = (upperMessage === "SKIP" || upperMessage === "NO" || upperMessage === "NONE")
+                  ? sessionData.address
+                  : (message.length > 3 ? `${message}, ${sessionData.address || ''}` : sessionData.address);
+
+                const coords = await geocodeAddress(addressToGeocode || sessionData.address || "Harare, Zimbabwe");
+                lat = coords.lat;
+                lon = coords.lon;
+              }
+
+              // Create the active shop record
+              const { error: shopInsertError } = await supabaseAdmin
+                .from("shops")
+                .insert({
+                  name: sessionData.first_name,
+                  surname: sessionData.surname,
+                  shop_name: sessionData.shop_name,
+                  address: sessionData.address,
+                  phone_number: sender,
+                  latitude: lat,
+                  longitude: lon,
+                  is_active: true
+                });
+
+              if (shopInsertError) {
+                console.error("[whatsapp-reply-handler] Shop registration insert failed:", shopInsertError);
+                reply = "❌ Sorry, an error occurred while saving your shop details. Please reply REGISTER to try again.";
+              } else {
+                // Clear registration session
+                const { error: deleteError } = await supabaseAdmin
+                  .from("registration_sessions")
+                  .delete()
+                  .eq("phone_number", sender);
+
+                if (deleteError) {
+                  console.error(`[whatsapp-reply-handler] Warning: Failed to delete registration session for ${sender}:`, deleteError);
+                }
+
+                reply = `🎉 Congratulations! *${sessionData.shop_name}* is now officially registered and active on eShop!\n\n📍 *Address:* ${sessionData.address}\n\nYou will automatically receive WhatsApp notifications for any customer orders placed nearby.`;
               }
             }
           } catch (err) {
             console.error("Error processing registration session:", err);
             reply = "❌ An unexpected error occurred. Please reply REGISTER to restart the registration process.";
-          }
-        } 
-        // Handle start of new registration
-        else if (upperMessage === "REGISTER") {
-          // Check if the shop is already registered in 'shops' table
-          const { data: existingShop, error: shopFetchError } = await supabaseAdmin
-            .from("shops")
-            .select("*")
-            .eq("phone_number", sender)
-            .maybeSingle();
-
-          if (shopFetchError) {
-            console.error(`[whatsapp-reply-handler] Error checking existing shop for ${sender}:`, shopFetchError);
-            reply = "❌ A database error occurred. Please try again later.";
-          } else if (existingShop) {
-            reply = `✨ Your shop, *${existingShop.shop_name}*, is already registered and active on eShop!`;
-          } else {
-            // Create new registration session
-            const { error: sessionInsertError } = await supabaseAdmin
-              .from("registration_sessions")
-              .insert({
-                phone_number: sender,
-                step: 1
-              });
-            
-            if (sessionInsertError) {
-              console.error(`[whatsapp-reply-handler] Error inserting registration session for ${sender}:`, sessionInsertError);
-              reply = "❌ Failed to start registration session. Please try again.";
-            } else {
-              reply = "👋 Welcome to eShop! Let's register your shop. What is your first name?";
-            }
           }
         }
         // Handle Order Accept/Decline flow (supports "1", "2", or "ACCEPT <slug>", "DECLINE <slug>")
